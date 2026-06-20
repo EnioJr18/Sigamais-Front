@@ -9,9 +9,9 @@ const Badge = React.forwardRef<
   }
 >(({ className, variant = 'default', ...props }, ref) => {
   const variants = {
-    default: 'bg-slate-100 text-slate-800 ring-1 ring-inset ring-slate-200',
-    outline: 'border border-slate-200 text-slate-700',
-    soft: 'bg-slate-900/60 text-slate-100 ring-1 ring-inset ring-white/10',
+    default: 'bg-primary/10 text-primary ring-1 ring-inset ring-primary/20',
+    outline: 'border border-border text-foreground',
+    soft: 'bg-secondary text-secondary-foreground ring-1 ring-inset ring-accent/20',
   };
 
   return (

@@ -1,55 +1,71 @@
-import { NavLink } from 'react-router-dom';
-import {
-  BookOpen,
-  GraduationCap,
-  LayoutDashboard,
-  ScrollText,
-  SquarePen,
-  UserRound,
-  Users,
-} from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
+import { LogOut, Menu, UserRound } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
-const items = [
-  { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
-  { label: 'Alunos', to: '/alunos', icon: Users },
-  { label: 'Professores', to: '/professores', icon: UserRound },
-  { label: 'Turmas', to: '/turmas', icon: GraduationCap },
-  { label: 'Disciplinas', to: '/disciplinas', icon: BookOpen },
-  { label: 'Notas', to: '/notas', icon: SquarePen },
-  { label: 'Frequência', to: '/frequencia', icon: ScrollText },
-];
+import { getCurrentUser } from '../../lib/rbac';
+import { clearToken } from '../../services/auth';
+import { ThemeToggle } from '../theme/ThemeToggle';
+import { Button } from '../ui/button';
 
-function Header() {
+interface HeaderProps {
+  onMenuClick: () => void;
+}
+
+function Header({ onMenuClick }: HeaderProps) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const user = getCurrentUser();
+
+  const handleLogout = () => {
+    clearToken();
+    queryClient.clear();
+    navigate('/login', { replace: true });
+  };
+
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8 xl:flex-row xl:items-center xl:justify-between">
-        <div>
-          <p className="text-lg font-semibold tracking-wide text-white">
-            Siga-Plus
-          </p>
-          <p className="text-sm text-slate-400">
-            Cadastro e acompanhamento escolar
-          </p>
+    <header className="sticky top-0 z-30 border-b border-border bg-header shadow-[0_4px_18px_-16px_rgba(15,74,138,0.35)] dark:shadow-none">
+      <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onMenuClick}
+            className="lg:hidden"
+            aria-label="Abrir menu"
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <div>
+            <p className="text-sm font-semibold text-primary">Painel SIGA+</p>
+            <p className="hidden text-xs text-muted-foreground sm:block">
+              Instituto Federal de Alagoas
+            </p>
+          </div>
         </div>
-        <nav className="flex flex-wrap items-center gap-2">
-          {items.map(item => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                [
-                  'inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition',
-                  isActive
-                    ? 'bg-sky-500 text-slate-950 shadow-lg shadow-sky-500/20'
-                    : 'border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10',
-                ].join(' ')
-              }
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
+
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="hidden text-right sm:block">
+            <p className="max-w-48 truncate text-sm font-medium text-foreground">
+              {user.name}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {user.role ?? 'Perfil não informado'}
+            </p>
+          </div>
+          <ThemeToggle />
+          <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary ring-1 ring-inset ring-primary/15">
+            <UserRound className="h-4 w-4" />
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={handleLogout}
+            className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            aria-label="Sair do sistema"
+          >
+            <LogOut className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
     </header>
   );

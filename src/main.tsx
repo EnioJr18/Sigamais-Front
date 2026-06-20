@@ -8,6 +8,7 @@ import {
 } from 'react-router-dom';
 import './index.css';
 import App from './App';
+import ProtectedRoute from './components/auth/ProtectedRoute.tsx';
 import Login from './pages/auth/Login.tsx';
 import Dashboard from './pages/dashboard/Dashboard.tsx';
 import Students from './pages/students/Students.tsx';
@@ -16,6 +17,8 @@ import Classes from './pages/classes/Classes.tsx';
 import Disciplines from './pages/disciplines/Disciplines.tsx';
 import Grades from './pages/grades/Grades.tsx';
 import Attendance from './pages/attendance/Attendance.tsx';
+import Enrollments from './pages/enrollments/Enrollments.tsx';
+import RiskAlerts from './pages/risk/RiskAlerts.tsx';
 
 const router = createBrowserRouter([
   {
@@ -24,39 +27,52 @@ const router = createBrowserRouter([
   },
   {
     path: '/',
-    element: <App />,
+    element: <ProtectedRoute />,
     children: [
       {
-        index: true,
-        element: <Navigate to="/login" replace />,
-      },
-      {
-        path: 'dashboard',
-        element: <Dashboard />,
-      },
-      {
-        path: 'alunos',
-        element: <Students />,
-      },
-      {
-        path: 'professores',
-        element: <Professors />,
-      },
-      {
-        path: 'turmas',
-        element: <Classes />,
-      },
-      {
-        path: 'disciplinas',
-        element: <Disciplines />,
-      },
-      {
-        path: 'notas',
-        element: <Grades />,
-      },
-      {
-        path: 'frequencia',
-        element: <Attendance />,
+        element: <App />,
+        children: [
+          {
+            index: true,
+            element: <Navigate to="/dashboard" replace />,
+          },
+          {
+            path: 'dashboard',
+            element: <Dashboard />,
+          },
+          {
+            path: 'alunos',
+            element: <Students />,
+          },
+          {
+            path: 'professores',
+            element: <Professors />,
+          },
+          {
+            path: 'turmas',
+            element: <Classes />,
+          },
+          {
+            path: 'disciplinas',
+            element: <Disciplines />,
+          },
+          {
+            path: 'matriculas',
+            element: <Enrollments />,
+          },
+          {
+            path: 'notas',
+            element: <Grades />,
+          },
+          {
+            path: 'frequencia',
+            element: <Attendance />,
+          },
+          {
+            path: 'risco',
+            element: <RiskAlerts />,
+          },
+        ],
       },
     ],
   },

@@ -1,10 +1,23 @@
-import type { ReactNode, FormEvent } from 'react';
 import { useMemo, useState } from 'react';
 
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
-import { BookOpen, Plus, Search } from 'lucide-react';
+import { Plus, Search, UserRound } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 
-import { Badge } from '@/components/ui/badge';
+import {
+  DeleteConfirmation,
+  FeedbackBanner,
+  FormField,
+  InlineError,
+  RowActions,
+  type Feedback,
+} from '@/components/entities/CrudElements';
+import { EmptyState } from '@/components/feedback/EmptyState';
+import { ErrorMessage } from '@/components/feedback/ErrorMessage';
+import { LoadingState } from '@/components/feedback/LoadingState';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -14,7 +27,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Modal } from '@/components/ui/modal';
 import {
   Table,
   TableBody,
@@ -23,200 +36,381 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { canManageStructure } from '@/lib/rbac';
+import { getApiErrorMessage } from '@/services/http';
 import {
-  classes,
-  disciplines,
-  nextId,
-  professors as seedProfessors,
+  atualizarProfessor,
+  criarProfessor,
+  excluirProfessor,
+  getProfessorName,
+  getProfessorSpecialty,
+  listarProfessores,
   type Professor,
-} from '@/lib/school-data';
+  type ProfessorPayload,
+} from '@/services/professorService';
 
-type ProfessorForm = Omit<Professor, 'id'>;
+const professorSchema = z.object({
+  usuarioId: z.coerce.number<number>().int().positive('Informe o ID do usuário.'),
+  titulacao: z.string().trim().min(2, 'Informe a titulação.'),
+});
 
-const emptyForm: ProfessorForm = {
-  name: '',
-  email: '',
-  specialty: '',
-  phone: '',
+type ProfessorFormData = z.infer<typeof professorSchema>;
+
+const emptyForm: ProfessorFormData = {
+  usuarioId: 0,
+  titulacao: '',
 };
 
 function Professors() {
-  const [items, setItems] = useState(seedProfessors);
+  const queryClient = useQueryClient();
+  const canManage = canManageStructure();
   const [search, setSearch] = useState('');
-  const [form, setForm] = useState(emptyForm);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Professor | null>(null);
+  const [deleting, setDeleting] = useState<Professor | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
 
-  const filtered = useMemo(
-    () =>
-      items.filter(item => {
-        const haystack = [item.name, item.email, item.specialty, item.phone]
-          .join(' ')
-          .toLowerCase();
+  const professoresQuery = useQuery({
+    queryKey: ['professores'],
+    queryFn: listarProfessores,
+  });
 
-        return haystack.includes(search.toLowerCase());
-      }),
-    [items, search],
-  );
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<ProfessorFormData>({
+    resolver: zodResolver(professorSchema),
+    defaultValues: emptyForm,
+  });
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setItems(current => [...current, { id: nextId(current), ...form }]);
-    setForm(emptyForm);
+  const refreshData = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['professores'] }),
+      queryClient.invalidateQueries({ queryKey: ['dashboard-summary'] }),
+    ]);
   };
+
+  const saveMutation = useMutation({
+    mutationFn: (payload: ProfessorPayload) =>
+      editing
+        ? atualizarProfessor(editing.id, payload)
+        : criarProfessor(payload),
+    onSuccess: async () => {
+      const action = editing ? 'atualizado' : 'cadastrado';
+      await refreshData();
+      setFeedback({
+        type: 'success',
+        message: `Professor ${action} com sucesso.`,
+      });
+      closeForm();
+    },
+    onError: error =>
+      setFeedback({
+        type: 'error',
+        message: getApiErrorMessage(
+          error,
+          'Não foi possível salvar o professor.',
+        ),
+      }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: excluirProfessor,
+    onSuccess: async () => {
+      await refreshData();
+      setDeleting(null);
+      setFeedback({
+        type: 'success',
+        message: 'Professor excluído com sucesso.',
+      });
+    },
+    onError: error =>
+      setFeedback({
+        type: 'error',
+        message: getApiErrorMessage(
+          error,
+          'Não foi possível excluir o professor.',
+        ),
+      }),
+  });
+
+  const filtered = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase('pt-BR');
+    if (!term) return professoresQuery.data ?? [];
+
+    return (professoresQuery.data ?? []).filter(professor =>
+      [
+        getProfessorName(professor),
+        getProfessorSpecialty(professor),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLocaleLowerCase('pt-BR')
+        .includes(term),
+    );
+  }, [professoresQuery.data, search]);
+
+  function openCreate() {
+    setEditing(null);
+    setFeedback(null);
+    reset(emptyForm);
+    setFormOpen(true);
+  }
+
+  function openEdit(professor: Professor) {
+    setEditing(professor);
+    setFeedback(null);
+    reset({
+      usuarioId: 0,
+      titulacao: getProfessorSpecialty(professor),
+    });
+    setFormOpen(true);
+  }
+
+  function closeForm() {
+    setFormOpen(false);
+    setEditing(null);
+    reset(emptyForm);
+  }
 
   return (
     <motion.section
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-6 px-4 py-6 sm:px-6 lg:px-8"
+      className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8"
     >
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-3 text-sky-200">
-            <BookOpen className="h-5 w-5" />
-            <CardTitle>Professores</CardTitle>
-          </div>
-          <CardDescription>
-            Cadastro, relação com disciplinas e visualização dos vínculos com
-            turmas.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <form
-            onSubmit={handleSubmit}
-            className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/30 p-4"
-          >
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Nome">
-                <Input
-                  value={form.name}
-                  onChange={event =>
-                    setForm({ ...form, name: event.target.value })
-                  }
-                  placeholder="Nome do professor"
-                />
-              </Field>
-              <Field label="Especialidade">
-                <Input
-                  value={form.specialty}
-                  onChange={event =>
-                    setForm({ ...form, specialty: event.target.value })
-                  }
-                  placeholder="Ex.: Matemática"
-                />
-              </Field>
-              <Field label="Email">
-                <Input
-                  value={form.email}
-                  onChange={event =>
-                    setForm({ ...form, email: event.target.value })
-                  }
-                  placeholder="professor@ifal.edu.br"
-                />
-              </Field>
-              <Field label="Telefone">
-                <Input
-                  value={form.phone}
-                  onChange={event =>
-                    setForm({ ...form, phone: event.target.value })
-                  }
-                  placeholder="(82) 99999-0000"
-                />
-              </Field>
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <Badge variant="soft">
-                Relações exibidas na listagem de disciplinas e turmas
-              </Badge>
-              <Button type="submit">
-                <Plus className="h-4 w-4" />
-                Cadastrar
-              </Button>
-            </div>
-          </form>
+      <PageHeader canManage={canManage} onCreate={openCreate} />
 
-          <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/30 p-4">
-            <Field label="Filtro">
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <Input
-                  className="pl-9"
-                  value={search}
-                  onChange={event => setSearch(event.target.value)}
-                  placeholder="Buscar por nome, email ou especialidade"
-                />
-              </div>
-            </Field>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <MiniStat label="Professores" value={items.length} />
-              <MiniStat label="Disciplinas" value={disciplines.length} />
-              <MiniStat label="Turmas" value={classes.length} />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {feedback && !formOpen && !deleting && (
+        <FeedbackBanner feedback={feedback} />
+      )}
 
       <Card>
-        <CardHeader>
-          <CardTitle>Listagem</CardTitle>
-          <CardDescription>
-            Registros filtrados pelo campo de busca.
-          </CardDescription>
+        <CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+          <div>
+            <CardTitle>Professores cadastrados</CardTitle>
+            <CardDescription className="mt-2">
+              Corpo docente carregado diretamente da API.
+            </CardDescription>
+          </div>
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder="Buscar por nome, email ou especialidade"
+              className="pl-9"
+              aria-label="Buscar professores"
+            />
+          </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Especialidade</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Turmas</TableHead>
-                <TableHead>Disciplinas</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map(item => (
-                <TableRow key={item.id}>
-                  <TableCell>{item.name}</TableCell>
-                  <TableCell>{item.specialty}</TableCell>
-                  <TableCell>{item.email}</TableCell>
-                  <TableCell>
-                    {classes
-                      .filter(classGroup => classGroup.professorId === item.id)
-                      .map(classGroup => classGroup.name)
-                      .join(', ') || 'Sem turma vinculada'}
-                  </TableCell>
-                  <TableCell>
-                    {disciplines
-                      .filter(discipline => discipline.professorId === item.id)
-                      .map(discipline => discipline.name)
-                      .join(', ') || 'Sem disciplina vinculada'}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          {professoresQuery.isLoading ? (
+            <LoadingState label="Carregando professores..." />
+          ) : professoresQuery.isError ? (
+            <ErrorMessage
+              message="Não foi possível consultar os professores."
+              onRetry={() => professoresQuery.refetch()}
+            />
+          ) : filtered.length === 0 ? (
+            <EmptyState
+              icon={UserRound}
+              title={search ? 'Nenhum professor encontrado' : 'Nenhum professor cadastrado'}
+              description={
+                search
+                  ? 'Tente buscar por outro termo.'
+                  : 'Cadastre o primeiro professor para formar o corpo docente.'
+              }
+              action={
+                canManage && !search ? (
+                  <Button size="sm" onClick={openCreate}>
+                    <Plus className="h-4 w-4" />
+                    Cadastrar professor
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <ProfessorList
+              professores={filtered}
+              canManage={false}
+              onEdit={openEdit}
+              onDelete={item => {
+                setFeedback(null);
+                setDeleting(item);
+              }}
+            />
+          )}
         </CardContent>
       </Card>
+
+      <Modal
+        open={formOpen}
+        title={editing ? 'Editar professor' : 'Cadastrar professor'}
+        description="Preencha os dados que serão enviados para a API."
+        onClose={closeForm}
+      >
+        <form
+          onSubmit={handleSubmit(data => saveMutation.mutate(data))}
+          className="space-y-4"
+        >
+          {feedback?.type === 'error' && (
+            <InlineError message={feedback.message} />
+          )}
+          <FormField label="ID do usuário" error={errors.usuarioId?.message}>
+            <Input type="number" min="1" {...register('usuarioId')} />
+          </FormField>
+          <FormField label="Titulação" error={errors.titulacao?.message}>
+            <Input placeholder="Ex.: Mestre" {...register('titulacao')} />
+          </FormField>
+          <ModalActions
+            pending={saveMutation.isPending}
+            editing={Boolean(editing)}
+            onCancel={closeForm}
+          />
+        </form>
+      </Modal>
+
+      <DeleteConfirmation
+        open={Boolean(deleting)}
+        entityLabel="professor"
+        itemLabel={deleting ? getProfessorName(deleting) : ''}
+        pending={deleteMutation.isPending}
+        error={feedback?.type === 'error' ? feedback.message : undefined}
+        onClose={() => setDeleting(null)}
+        onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
+      />
     </motion.section>
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function PageHeader({
+  canManage,
+  onCreate,
+}: {
+  canManage: boolean;
+  onCreate: () => void;
+}) {
   return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      {children}
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <p className="text-sm font-medium text-accent">Gestão acadêmica</p>
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-primary sm:text-3xl">
+          Professores
+        </h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Consulte e mantenha os registros do corpo docente.
+        </p>
+      </div>
+      {canManage && (
+        <Button
+          onClick={onCreate}
+          className="self-start sm:self-auto"
+        >
+          <Plus className="h-4 w-4" />
+          Novo professor
+        </Button>
+      )}
     </div>
   );
 }
 
-function MiniStat({ label, value }: { label: string; value: number }) {
+function ProfessorList({
+  professores,
+  canManage,
+  onEdit,
+  onDelete,
+}: {
+  professores: Professor[];
+  canManage: boolean;
+  onEdit: (item: Professor) => void;
+  onDelete: (item: Professor) => void;
+}) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
-      <p className="text-xs uppercase tracking-[0.24em] text-slate-400">
-        {label}
-      </p>
-      <p className="mt-1 text-2xl font-semibold text-white">{value}</p>
+    <>
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>ID</TableHead>
+              <TableHead>Titulação</TableHead>
+              {canManage && <TableHead className="text-right">Ações</TableHead>}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {professores.map(professor => (
+              <TableRow key={professor.id}>
+                <TableCell className="font-medium text-foreground">
+                  #{professor.id}
+                </TableCell>
+                <TableCell>{getProfessorSpecialty(professor) || '—'}</TableCell>
+                {canManage && (
+                  <TableCell>
+                    <RowActions
+                      item={professor}
+                      label={getProfessorName(professor)}
+                      onEdit={onEdit}
+                      onDelete={onDelete}
+                    />
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <div className="grid gap-3 md:hidden">
+        {professores.map(professor => (
+          <article
+            key={professor.id}
+            className="rounded-2xl border border-border bg-muted/30 p-4"
+          >
+            <h3 className="font-medium text-foreground">
+              {getProfessorName(professor)}
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {getProfessorSpecialty(professor) || 'Especialidade não informada'}
+            </p>
+            {canManage && (
+              <div className="mt-4 border-t border-border pt-3">
+                <RowActions
+                  item={professor}
+                  label={getProfessorName(professor)}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                />
+              </div>
+            )}
+          </article>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function ModalActions({
+  pending,
+  editing,
+  onCancel,
+}: {
+  pending: boolean;
+  editing: boolean;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+      <Button variant="ghost" onClick={onCancel}>
+        Cancelar
+      </Button>
+      <Button type="submit" disabled={pending}>
+        {pending
+          ? 'Salvando...'
+          : editing
+            ? 'Salvar alterações'
+            : 'Cadastrar professor'}
+      </Button>
     </div>
   );
 }

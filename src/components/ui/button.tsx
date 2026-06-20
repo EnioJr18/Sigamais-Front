@@ -3,19 +3,21 @@ import * as React from 'react';
 import { cn } from '@/lib/utils';
 
 export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'default' | 'outline' | 'secondary' | 'ghost';
+  variant?: 'default' | 'outline' | 'secondary' | 'ghost' | 'destructive';
   size?: 'default' | 'sm' | 'lg' | 'icon';
 };
 
 const buttonVariants = {
   default:
-    'bg-slate-950 text-white shadow-sm hover:bg-slate-800 focus-visible:ring-slate-400',
+    'bg-primary text-primary-foreground shadow-sm hover:bg-primary-hover focus-visible:ring-ring',
   outline:
-    'border border-slate-200 bg-white text-slate-900 hover:bg-slate-50 focus-visible:ring-slate-400',
+    'border border-border bg-card text-foreground hover:bg-muted focus-visible:ring-ring',
   secondary:
-    'bg-slate-100 text-slate-900 hover:bg-slate-200 focus-visible:ring-slate-400',
+    'bg-accent text-accent-foreground shadow-sm hover:bg-accent-hover focus-visible:ring-accent',
   ghost:
-    'bg-transparent text-slate-700 hover:bg-slate-100 hover:text-slate-950 focus-visible:ring-slate-400',
+    'bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring',
+  destructive:
+    'bg-destructive text-destructive-foreground shadow-sm hover:opacity-90 focus-visible:ring-destructive',
 };
 
 const sizeVariants = {
