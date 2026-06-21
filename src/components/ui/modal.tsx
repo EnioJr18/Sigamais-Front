@@ -43,11 +43,11 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl border border-border bg-popover p-6 text-popover-foreground shadow-2xl sm:max-w-lg sm:rounded-3xl"
+        className="max-h-[92vh] w-full overflow-y-auto rounded-t-3xl border border-border bg-popover p-5 text-popover-foreground shadow-[0_28px_80px_-24px_rgba(15,23,42,0.55)] sm:max-w-lg sm:rounded-2xl sm:p-6"
       >
-        <div className="mb-6 flex items-start justify-between gap-4">
+        <div className="mb-6 flex items-start justify-between gap-4 border-b border-border pb-5">
           <div>
-            <h2 id="modal-title" className="text-xl font-semibold text-foreground">
+            <h2 id="modal-title" className="text-xl font-semibold tracking-tight text-foreground">
               {title}
             </h2>
             {description && (

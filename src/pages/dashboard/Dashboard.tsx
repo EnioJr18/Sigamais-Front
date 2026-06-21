@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
   BookOpen,
+  ArrowUpRight,
   GraduationCap,
   RefreshCw,
   School,
@@ -134,18 +135,20 @@ function Dashboard() {
             transition={{ delay: index * 0.05 }}
           >
             <Link to={card.href} className="group block h-full">
-              <Card className="h-full overflow-hidden transition duration-300 group-hover:-translate-y-1 group-hover:border-primary/30">
-                <CardContent className="p-5">
-                  <div
-                    className={`inline-flex rounded-2xl bg-gradient-to-br p-3 ${card.tone}`}
-                  >
-                    <card.icon className="h-5 w-5" />
+              <Card className="relative h-full overflow-hidden transition duration-300 group-hover:-translate-y-1 group-hover:border-primary/30 group-hover:shadow-[0_20px_40px_-26px_rgba(21,87,166,0.45)]">
+                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary to-accent opacity-70" />
+                <CardContent className="p-5 pt-6">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className={`inline-flex rounded-xl bg-gradient-to-br p-3 ring-1 ring-inset ring-current/10 ${card.tone}`}>
+                      <card.icon className="h-5 w-5" />
+                    </div>
+                    <ArrowUpRight className="h-4 w-4 text-muted-foreground transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary" />
                   </div>
-                  <p className="mt-6 text-3xl font-semibold tracking-tight text-foreground">
+                  <p className="mt-6 text-4xl font-bold tracking-tight text-foreground">
                     {data[card.key] ?? '—'}
                   </p>
-                  <p className="mt-1 font-medium text-foreground">{card.label}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
+                  <p className="mt-1.5 font-semibold text-foreground">{card.label}</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
                     {data[card.key] === null
                       ? 'Dado indisponível'
                       : card.description}
@@ -165,7 +168,7 @@ function Dashboard() {
         />
       )}
 
-      <Card className="overflow-hidden">
+      <Card className="overflow-hidden border-primary/15 bg-gradient-to-br from-card via-card to-siga-blue-50/70 dark:to-card">
         <CardContent className="grid gap-6 p-6 lg:grid-cols-[1.4fr_0.6fr] lg:items-center">
           <div>
             <span className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">

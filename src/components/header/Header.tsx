@@ -23,8 +23,8 @@ function Header({ onMenuClick }: HeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-header shadow-[0_4px_18px_-16px_rgba(15,74,138,0.35)] dark:shadow-none">
-      <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+    <header className="sticky top-0 z-30 border-b border-border bg-header/95 shadow-[0_6px_24px_-22px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:shadow-none">
+      <div className="flex h-[4.25rem] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           <Button
             variant="ghost"
@@ -36,7 +36,7 @@ function Header({ onMenuClick }: HeaderProps) {
             <Menu className="h-5 w-5" />
           </Button>
           <div>
-            <p className="text-sm font-semibold text-primary">Painel SIGA+</p>
+            <p className="text-sm font-bold tracking-tight text-primary">Painel SIGA+</p>
             <p className="hidden text-xs text-muted-foreground sm:block">
               Instituto Federal de Alagoas
             </p>
@@ -44,7 +44,7 @@ function Header({ onMenuClick }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="hidden text-right sm:block">
+          <div className="hidden border-r border-border pr-3 text-right sm:block">
             <p className="max-w-48 truncate text-sm font-medium text-foreground">
               {user.name}
             </p>
@@ -53,7 +53,7 @@ function Header({ onMenuClick }: HeaderProps) {
             </p>
           </div>
           <ThemeToggle />
-          <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary ring-1 ring-inset ring-primary/15">
+          <span className="grid h-9 w-9 place-items-center rounded-full bg-siga-blue-50 text-primary ring-1 ring-inset ring-primary/15 dark:bg-primary/10">
             <UserRound className="h-4 w-4" />
           </span>
           <Button

@@ -496,7 +496,7 @@ function ClassList({
           return (
             <article
               key={turma.id}
-              className="rounded-2xl border border-border bg-muted/30 p-4"
+              className="rounded-xl border border-border bg-card p-4 shadow-sm"
             >
               <div className="flex items-start justify-between gap-3">
                 <h3 className="font-medium text-foreground">{getTurmaName(turma)}</h3>

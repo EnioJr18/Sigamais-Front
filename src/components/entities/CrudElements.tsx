@@ -14,7 +14,7 @@ export function FeedbackBanner({ feedback }: { feedback: Feedback }) {
   return (
     <div
       role="status"
-      className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm ${
+      className={`flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm ${
         feedback.type === 'success'
           ? 'border-success/25 bg-success/10 text-success dark:text-success-foreground'
           : 'border-destructive/25 bg-destructive/10 text-destructive dark:text-red-100'
@@ -50,9 +50,9 @@ export function FormField({
 }) {
   return (
     <div className="space-y-2">
-      <Label>{label}</Label>
+      <Label className="text-sm font-semibold text-foreground">{label}</Label>
       {children}
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && <p className="flex items-center gap-1 text-xs font-medium text-destructive"><AlertCircle className="h-3 w-3" />{error}</p>}
     </div>
   );
 }

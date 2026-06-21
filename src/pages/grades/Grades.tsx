@@ -114,6 +114,10 @@ function Grades() {
         .includes(term);
     });
   }, [alunos, matriculas, notasQuery.data, search, turmas]);
+  const summaries = useMemo(
+    () => buildGradeSummaries(filtered, matriculas, alunos, turmas),
+    [alunos, filtered, matriculas, turmas],
+  );
 
   function openCreate() {
     setEditing(null);
@@ -146,13 +150,20 @@ function Grades() {
 
       <Card>
         <CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-          <div><CardTitle>Notas registradas</CardTitle><CardDescription className="mt-2">Resultados carregados diretamente da API.</CardDescription></div>
+          <div><CardTitle>Resumo de desempenho</CardTitle><CardDescription className="mt-2">Médias calculadas por matrícula e disciplina.</CardDescription></div>
           <div className="relative w-full sm:max-w-sm"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar aluno, turma, matrícula ou nota" className="pl-9" /></div>
         </CardHeader>
         <CardContent>
-          {notasQuery.isLoading ? <LoadingState label="Carregando notas..." /> : notasQuery.isError ? <ErrorMessage message="Não foi possível consultar as notas." onRetry={() => notasQuery.refetch()} /> : filtered.length === 0 ? <EmptyState icon={Calculator} title={search ? 'Nenhuma nota encontrada' : 'Nenhuma nota registrada'} description={search ? 'Tente buscar por outro termo.' : 'Lance a primeira nota para uma matrícula.'} action={canManage && !search && matriculas.length > 0 ? <Button size="sm" onClick={openCreate}>Lançar nota</Button> : undefined} /> : <GradeList notas={filtered} matriculas={matriculas} alunos={alunos} turmas={turmas} canManage={false} onEdit={openEdit} onDelete={item => { setFeedback(null); setDeleting(item); }} />}
+          {notasQuery.isLoading ? <LoadingState label="Carregando notas..." /> : notasQuery.isError ? <ErrorMessage message="Não foi possível consultar as notas." onRetry={() => notasQuery.refetch()} /> : filtered.length === 0 ? <EmptyState icon={Calculator} title={search ? 'Nenhuma nota encontrada' : 'Nenhuma nota registrada'} description={search ? 'Tente buscar por outro termo.' : 'Lance a primeira nota para uma matrícula.'} action={canManage && !search && matriculas.length > 0 ? <Button size="sm" onClick={openCreate}>Lançar nota</Button> : undefined} /> : <GradeSummaryList summaries={summaries} />}
         </CardContent>
       </Card>
+
+      {filtered.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle>Lançamentos individuais</CardTitle><CardDescription>Histórico detalhado das {filtered.length} notas encontradas.</CardDescription></CardHeader>
+          <CardContent><GradeList notas={filtered} matriculas={matriculas} alunos={alunos} turmas={turmas} canManage={false} onEdit={openEdit} onDelete={item => { setFeedback(null); setDeleting(item); }} /></CardContent>
+        </Card>
+      )}
 
       <Modal open={formOpen} title={editing ? 'Editar nota' : 'Lançar nota'} description="A nota será vinculada à matrícula selecionada." onClose={closeForm}>
         <form onSubmit={handleSubmit(data => saveMutation.mutate({ matriculaId: Number(data.matriculaId), valor: Number(data.valor), tipo: data.tipo }))} className="space-y-4">
@@ -169,8 +180,66 @@ function Grades() {
   );
 }
 
+type GradeSummary = {
+  key: string;
+  alunoLabel: string;
+  alunoMatricula: string;
+  disciplinaNome: string;
+  turmaLabel: string;
+  media: number;
+  quantidade: number;
+};
+
+function buildGradeSummaries(
+  notas: Nota[],
+  matriculas: Matricula[],
+  alunos: Awaited<ReturnType<typeof listarAlunos>>,
+  turmas: Awaited<ReturnType<typeof listarTurmas>>,
+) {
+  const groups = new Map<string, GradeSummary & { soma: number }>();
+
+  notas.forEach(nota => {
+    const matricula = resolveMatricula(nota, matriculas);
+    const context = getNotaContext(nota, matricula, alunos, turmas);
+    const key = [
+      getNotaMatriculaId(nota) ?? 'sem-matricula',
+      context.alunoLabel,
+      context.disciplinaNome,
+      context.turmaLabel,
+    ].join('|');
+    const current = groups.get(key);
+
+    if (current) {
+      current.soma += getNotaValue(nota);
+      current.quantidade += 1;
+      current.media = current.soma / current.quantidade;
+      return;
+    }
+
+    groups.set(key, {
+      key,
+      ...context,
+      soma: getNotaValue(nota),
+      media: getNotaValue(nota),
+      quantidade: 1,
+    });
+  });
+
+  return Array.from(groups.values());
+}
+
+function getGradeSituation(media: number) {
+  if (media >= 7) return { label: 'Regular', className: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' };
+  if (media >= 5) return { label: 'Atenção', className: 'border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-300' };
+  return { label: 'Crítico', className: 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300' };
+}
+
+function GradeSummaryList({ summaries }: { summaries: GradeSummary[] }) {
+  return <><div className="hidden lg:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Matrícula acadêmica</TableHead><TableHead>Disciplina</TableHead><TableHead>Turma / semestre</TableHead><TableHead>Média</TableHead><TableHead>Notas</TableHead><TableHead>Situação</TableHead></TableRow></TableHeader><TableBody>{summaries.map(summary => { const situation = getGradeSituation(summary.media); return <TableRow key={summary.key}><TableCell className="font-semibold text-foreground">{summary.alunoLabel}</TableCell><TableCell>{summary.alunoMatricula}</TableCell><TableCell>{summary.disciplinaNome}</TableCell><TableCell>{summary.turmaLabel}</TableCell><TableCell><span className="text-lg font-bold text-primary">{summary.media.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span></TableCell><TableCell>{summary.quantidade}</TableCell><TableCell><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${situation.className}`}>{situation.label}</span></TableCell></TableRow>; })}</TableBody></Table></div><div className="grid gap-3 lg:hidden">{summaries.map(summary => { const situation = getGradeSituation(summary.media); return <article key={summary.key} className="rounded-xl border border-border bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-4"><div><h3 className="font-semibold text-foreground">{summary.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {summary.alunoMatricula}</p></div><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${situation.className}`}>{situation.label}</span></div><p className="mt-3 text-sm text-foreground">{summary.disciplinaNome}</p><p className="mt-1 text-xs text-muted-foreground">{summary.turmaLabel}</p><div className="mt-4 flex items-end justify-between border-t border-border pt-3"><div><p className="text-xs text-muted-foreground">Média</p><p className="text-2xl font-bold text-primary">{summary.media.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</p></div><p className="text-xs text-muted-foreground">{summary.quantidade} {summary.quantidade === 1 ? 'nota' : 'notas'}</p></div></article>; })}</div></>;
+}
+
 function GradeList({ notas, matriculas, alunos, turmas, canManage, onEdit, onDelete }: { notas: Nota[]; matriculas: Matricula[]; alunos: Awaited<ReturnType<typeof listarAlunos>>; turmas: Awaited<ReturnType<typeof listarTurmas>>; canManage: boolean; onEdit: (item: Nota) => void; onDelete: (item: Nota) => void }) {
-  return <><div className="hidden lg:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Matrícula acadêmica</TableHead><TableHead>Disciplina</TableHead><TableHead>Turma / semestre</TableHead><TableHead>Valor</TableHead><TableHead>Tipo</TableHead>{canManage && <TableHead className="text-right">Ações</TableHead>}</TableRow></TableHeader><TableBody>{notas.map(nota => { const matricula = resolveMatricula(nota, matriculas); const context = getNotaContext(nota, matricula, alunos, turmas); return <TableRow key={nota.id}><TableCell className="font-medium text-foreground">{context.alunoLabel}</TableCell><TableCell>{context.alunoMatricula}</TableCell><TableCell>{context.disciplinaNome}</TableCell><TableCell>{context.turmaLabel}</TableCell><TableCell><span className="font-semibold text-primary">{getNotaValue(nota).toLocaleString('pt-BR', { minimumFractionDigits: 1 })}</span></TableCell><TableCell>{nota.tipo || 'Não informado'}</TableCell>{canManage && <TableCell><RowActions item={nota} label={`nota ${nota.id}`} onEdit={onEdit} onDelete={onDelete} /></TableCell>}</TableRow>; })}</TableBody></Table></div><div className="grid gap-3 lg:hidden">{notas.map(nota => { const matricula = resolveMatricula(nota, matriculas); const context = getNotaContext(nota, matricula, alunos, turmas); return <article key={nota.id} className="rounded-2xl border border-border bg-muted/30 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-medium text-foreground">{context.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {context.alunoMatricula}</p><p className="mt-2 text-sm text-muted-foreground">{context.disciplinaNome} • {context.turmaLabel}</p></div><div className="text-right"><span className="text-xl font-semibold text-primary">{getNotaValue(nota).toLocaleString('pt-BR', { minimumFractionDigits: 1 })}</span><p className="mt-1 text-xs text-muted-foreground">{nota.tipo || 'Não informado'}</p></div></div>{canManage && <div className="mt-4 border-t border-border pt-3"><RowActions item={nota} label={`nota ${nota.id}`} onEdit={onEdit} onDelete={onDelete} /></div>}</article>; })}</div></>;
+  return <><div className="hidden lg:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Matrícula acadêmica</TableHead><TableHead>Disciplina</TableHead><TableHead>Turma / semestre</TableHead><TableHead>Valor</TableHead><TableHead>Tipo</TableHead>{canManage && <TableHead className="text-right">Ações</TableHead>}</TableRow></TableHeader><TableBody>{notas.map(nota => { const matricula = resolveMatricula(nota, matriculas); const context = getNotaContext(nota, matricula, alunos, turmas); return <TableRow key={nota.id}><TableCell className="font-medium text-foreground">{context.alunoLabel}</TableCell><TableCell>{context.alunoMatricula}</TableCell><TableCell>{context.disciplinaNome}</TableCell><TableCell>{context.turmaLabel}</TableCell><TableCell><span className="font-semibold text-primary">{getNotaValue(nota).toLocaleString('pt-BR', { minimumFractionDigits: 1 })}</span></TableCell><TableCell>{nota.tipo || 'Não informado'}</TableCell>{canManage && <TableCell><RowActions item={nota} label={`nota ${nota.id}`} onEdit={onEdit} onDelete={onDelete} /></TableCell>}</TableRow>; })}</TableBody></Table></div><div className="grid gap-3 lg:hidden">{notas.map(nota => { const matricula = resolveMatricula(nota, matriculas); const context = getNotaContext(nota, matricula, alunos, turmas); return <article key={nota.id} className="rounded-xl border border-border bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-3"><div><h3 className="font-medium text-foreground">{context.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {context.alunoMatricula}</p><p className="mt-2 text-sm text-muted-foreground">{context.disciplinaNome} • {context.turmaLabel}</p></div><div className="text-right"><span className="text-xl font-semibold text-primary">{getNotaValue(nota).toLocaleString('pt-BR', { minimumFractionDigits: 1 })}</span><p className="mt-1 text-xs text-muted-foreground">{nota.tipo || 'Não informado'}</p></div></div>{canManage && <div className="mt-4 border-t border-border pt-3"><RowActions item={nota} label={`nota ${nota.id}`} onEdit={onEdit} onDelete={onDelete} /></div>}</article>; })}</div></>;
 }
 
 function getNotaContext(nota: Nota, matricula: Matricula | undefined, alunos: Awaited<ReturnType<typeof listarAlunos>>, turmas: Awaited<ReturnType<typeof listarTurmas>>) {

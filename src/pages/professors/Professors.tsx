@@ -463,7 +463,7 @@ function ProfessorList({
         {professores.map(professor => (
           <article
             key={professor.id}
-            className="rounded-2xl border border-border bg-muted/30 p-4"
+            className="rounded-xl border border-border bg-card p-4 shadow-sm"
           >
             <h3 className="font-medium text-foreground">
               {getProfessorName(professor)}
