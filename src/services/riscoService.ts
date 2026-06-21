@@ -11,7 +11,17 @@ export async function buscarRiscoDaMatricula(id: number) {
     `/matriculas/${id}/risco`,
   );
 
-  return typeof response.data === 'string'
-    ? { risco: response.data }
-    : response.data;
+  const value = typeof response.data === 'string'
+    ? response.data
+    : response.data.risco;
+  const risco = String(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase() as NivelRisco;
+
+  if (!['ALTO', 'MEDIO', 'BAIXO'].includes(risco)) {
+    throw new Error('Nível de risco inválido.');
+  }
+
+  return { risco };
 }

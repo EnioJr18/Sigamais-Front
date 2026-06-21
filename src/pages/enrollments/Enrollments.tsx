@@ -39,7 +39,12 @@ import {
 } from '@/components/ui/table';
 import { getMatriculaContext } from '@/lib/academic';
 import { canManageStructure } from '@/lib/rbac';
-import { getAlunoName, listarAlunos } from '@/services/alunoService';
+import {
+  getAlunoName,
+  getAlunoRegistration,
+  listarAlunos,
+  type Aluno,
+} from '@/services/alunoService';
 import { getApiErrorMessage } from '@/services/http';
 import {
   criarMatricula,
@@ -48,7 +53,7 @@ import {
   type Matricula,
   type MatriculaPayload,
 } from '@/services/matriculaService';
-import { getTurmaName, listarTurmas } from '@/services/turmaService';
+import { listarTurmas, type Turma } from '@/services/turmaService';
 
 const matriculaSchema = z.object({
   alunoId: z.coerce.number<number>().int().positive('Selecione o aluno.'),
@@ -124,7 +129,14 @@ function Enrollments() {
 
     return (matriculasQuery.data ?? []).filter(matricula => {
       const context = getMatriculaContext(matricula, alunos, turmas);
-      return [matricula.id, context.alunoLabel, context.turmaLabel]
+      return [
+        matricula.id,
+        context.alunoLabel,
+        context.alunoMatricula,
+        context.turmaLabel,
+        context.disciplinaNome,
+        context.professorNome,
+      ]
         .join(' ')
         .toLocaleLowerCase('pt-BR')
         .includes(term);
@@ -229,18 +241,26 @@ function Enrollments() {
         description="Selecione o aluno e a turma para efetivar o vínculo."
         onClose={closeForm}
       >
-        <form onSubmit={handleSubmit(data => createMutation.mutate(data))} className="space-y-4">
+        <form
+          onSubmit={handleSubmit(data =>
+            createMutation.mutate({
+              alunoId: Number(data.alunoId),
+              turmaId: Number(data.turmaId),
+            }),
+          )}
+          className="space-y-4"
+        >
           {feedback?.type === 'error' && <InlineError message={feedback.message} />}
           <FormField label="Aluno" error={errors.alunoId?.message}>
             <Select {...register('alunoId')}>
               <option value="">Selecione</option>
-              {alunos.map(aluno => <option key={aluno.id} value={aluno.id}>{getAlunoName(aluno)}</option>)}
+              {alunos.map(aluno => <option key={aluno.id} value={aluno.id}>{getAlunoOptionLabel(aluno)}</option>)}
             </Select>
           </FormField>
           <FormField label="Turma" error={errors.turmaId?.message}>
             <Select {...register('turmaId')}>
               <option value="">Selecione</option>
-              {turmas.map(turma => <option key={turma.id} value={turma.id}>{getTurmaName(turma)}</option>)}
+              {turmas.map(turma => <option key={turma.id} value={turma.id}>{getTurmaOptionLabel(turma)}</option>)}
             </Select>
           </FormField>
           <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
@@ -274,25 +294,41 @@ function EnrollmentList({ matriculas, alunos, turmas, canManage, onDelete }: {
 }) {
   return (
     <>
-      <div className="hidden md:block">
+      <div className="hidden lg:block">
         <Table>
-          <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Aluno</TableHead><TableHead>Turma</TableHead>{canManage && <TableHead className="text-right">Ações</TableHead>}</TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Aluno</TableHead><TableHead>Matrícula</TableHead><TableHead>Turma / semestre</TableHead><TableHead>Disciplina</TableHead><TableHead>Professor</TableHead>{canManage && <TableHead className="text-right">Ações</TableHead>}</TableRow></TableHeader>
           <TableBody>
             {matriculas.map(item => {
               const context = getMatriculaContext(item, alunos, turmas);
-              return <TableRow key={item.id}><TableCell>#{item.id}</TableCell><TableCell className="font-medium text-foreground">{context.alunoLabel}</TableCell><TableCell>{context.turmaLabel}</TableCell>{canManage && <TableCell><div className="flex justify-end"><Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => onDelete(item)} aria-label={`Excluir matrícula ${item.id}`}><Trash2 className="h-4 w-4" /></Button></div></TableCell>}</TableRow>;
+              return <TableRow key={item.id}><TableCell>#{item.id}</TableCell><TableCell className="font-medium text-foreground">{context.alunoLabel}</TableCell><TableCell>{context.alunoMatricula}</TableCell><TableCell>{context.turmaLabel}</TableCell><TableCell>{context.disciplinaNome}</TableCell><TableCell>{context.professorNome}</TableCell>{canManage && <TableCell><div className="flex justify-end"><Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => onDelete(item)} aria-label={`Excluir matrícula ${item.id}`}><Trash2 className="h-4 w-4" /></Button></div></TableCell>}</TableRow>;
             })}
           </TableBody>
         </Table>
       </div>
-      <div className="grid gap-3 md:hidden">
+      <div className="grid gap-3 lg:hidden">
         {matriculas.map(item => {
           const context = getMatriculaContext(item, alunos, turmas);
-          return <article key={item.id} className="rounded-2xl border border-border bg-muted/30 p-4"><div className="flex items-start justify-between"><h3 className="font-medium text-foreground">{context.alunoLabel}</h3><span className="text-xs text-accent">#{item.id}</span></div><p className="mt-2 text-sm text-muted-foreground">{context.turmaLabel}</p>{canManage && <div className="mt-4 border-t border-border pt-3"><Button variant="ghost" size="sm" className="text-destructive" onClick={() => onDelete(item)}><Trash2 className="h-4 w-4" />Excluir</Button></div>}</article>;
+          return <article key={item.id} className="rounded-2xl border border-border bg-muted/30 p-4"><div className="flex items-start justify-between"><div><h3 className="font-medium text-foreground">{context.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {context.alunoMatricula}</p></div><span className="text-xs text-accent">#{item.id}</span></div><dl className="mt-4 grid gap-2 text-sm"><Relation label="Turma / semestre" value={context.turmaLabel} /><Relation label="Disciplina" value={context.disciplinaNome} /><Relation label="Professor" value={context.professorNome} /></dl>{canManage && <div className="mt-4 border-t border-border pt-3"><Button variant="ghost" size="sm" className="text-destructive" onClick={() => onDelete(item)}><Trash2 className="h-4 w-4" />Excluir</Button></div>}</article>;
         })}
       </div>
     </>
   );
+}
+
+function Relation({ label, value }: { label: string; value: string }) {
+  return <div><dt className="text-xs text-muted-foreground">{label}</dt><dd className="text-foreground">{value}</dd></div>;
+}
+
+function getAlunoOptionLabel(aluno: Aluno) {
+  const identificacao = getAlunoRegistration(aluno);
+  return `${getAlunoName(aluno)} - ${identificacao ? `Matrícula ${identificacao}` : `#${aluno.id}`}`;
+}
+
+function getTurmaOptionLabel(turma: Turma) {
+  const disciplina = turma.disciplinaNome || (turma.disciplinaId ? `Disciplina #${turma.disciplinaId}` : 'Disciplina não informada');
+  const professor = turma.professorNome || (turma.professorId ? `Professor #${turma.professorId}` : 'Professor não informado');
+  const vagas = turma.vagas === undefined ? 'Vagas não informadas' : `${turma.vagas} vagas`;
+  return `${turma.semestre || `Turma #${turma.id}`} - ${disciplina} - Prof. ${professor.replace(/^Professor /, '')} - ${vagas}`;
 }
 
 function getEnrollmentError(error: unknown) {

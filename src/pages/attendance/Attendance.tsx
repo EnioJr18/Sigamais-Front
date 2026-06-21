@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { motion } from 'framer-motion';
 import { Plus, ScrollText, Search } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -17,7 +18,7 @@ import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getMatriculaContext } from '@/lib/academic';
+import { buildEnrollmentLabel, getMatriculaContext } from '@/lib/academic';
 import { canManageAcademicRecords } from '@/lib/rbac';
 import { listarAlunos } from '@/services/alunoService';
 import {
@@ -72,7 +73,12 @@ function Attendance() {
       setFeedback({ type: 'success', message: `Frequência ${action} com sucesso.` });
       closeForm();
     },
-    onError: error => setFeedback({ type: 'error', message: getApiErrorMessage(error, 'Não foi possível salvar a frequência.') }),
+    onError: error => {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        void queryClient.invalidateQueries({ queryKey: ['matriculas'] });
+      }
+      setFeedback({ type: 'error', message: getAttendanceSaveError(error) });
+    },
   });
   const deleteMutation = useMutation({
     mutationFn: excluirFrequencia,
@@ -89,8 +95,8 @@ function Attendance() {
     if (!term) return frequenciasQuery.data ?? [];
     return (frequenciasQuery.data ?? []).filter(frequencia => {
       const matricula = resolveMatricula(frequencia, matriculas);
-      const context = matricula ? getMatriculaContext(matricula, alunos, turmas) : null;
-      return [frequencia.id, getFrequenciaMatriculaId(frequencia), context?.alunoLabel, context?.turmaLabel, getFaltas(frequencia)].filter(value => value !== undefined).join(' ').toLocaleLowerCase('pt-BR').includes(term);
+      const context = getFrequenciaContext(frequencia, matricula, alunos, turmas);
+      return [frequencia.id, getFrequenciaMatriculaId(frequencia), context.alunoLabel, context.alunoMatricula, context.disciplinaNome, context.turmaLabel, getFaltas(frequencia)].filter(value => value !== undefined).join(' ').toLocaleLowerCase('pt-BR').includes(term);
     });
   }, [alunos, frequenciasQuery.data, matriculas, search, turmas]);
 
@@ -118,18 +124,47 @@ function Attendance() {
       {feedback && !formOpen && !deleting && <FeedbackBanner feedback={feedback} />}
       <Card><CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0"><div><CardTitle>Frequências registradas</CardTitle><CardDescription className="mt-2">Faltas carregadas diretamente da API.</CardDescription></div><div className="relative w-full sm:max-w-sm"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar aluno, turma ou matrícula" className="pl-9" /></div></CardHeader><CardContent>{frequenciasQuery.isLoading ? <LoadingState label="Carregando frequências..." /> : frequenciasQuery.isError ? <ErrorMessage message="Não foi possível consultar as frequências." onRetry={() => frequenciasQuery.refetch()} /> : filtered.length === 0 ? <EmptyState icon={ScrollText} title={search ? 'Nenhuma frequência encontrada' : 'Nenhuma frequência registrada'} description={search ? 'Tente buscar por outro termo.' : 'Registre as primeiras faltas.'} action={canManage && !search && matriculas.length > 0 ? <Button size="sm" onClick={openCreate}>Lançar frequência</Button> : undefined} /> : <AttendanceList frequencias={filtered} matriculas={matriculas} alunos={alunos} turmas={turmas} canManage={false} onEdit={openEdit} onDelete={item => { setFeedback(null); setDeleting(item); }} />}</CardContent></Card>
 
-      <Modal open={formOpen} title={editing ? 'Editar frequência' : 'Lançar frequência'} description="As faltas serão vinculadas à matrícula selecionada." onClose={closeForm}><form onSubmit={handleSubmit(data => saveMutation.mutate(data))} className="space-y-4">{feedback?.type === 'error' && <InlineError message={feedback.message} />}<FormField label="Matrícula" error={errors.matriculaId?.message}><Select {...register('matriculaId')}><option value="">Selecione</option>{matriculas.map(item => { const context = getMatriculaContext(item, alunos, turmas); return <option key={item.id} value={item.id}>#{item.id} — {context.alunoLabel} / {context.turmaLabel}</option>; })}</Select></FormField><FormField label="Faltas" error={errors.faltas?.message}><Input type="number" min="0" {...register('faltas')} /></FormField><div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end"><Button variant="ghost" onClick={closeForm}>Cancelar</Button><Button type="submit" disabled={saveMutation.isPending}>{saveMutation.isPending ? 'Salvando...' : editing ? 'Salvar alterações' : 'Lançar frequência'}</Button></div></form></Modal>
+      <Modal open={formOpen} title={editing ? 'Editar frequência' : 'Lançar frequência'} description="As faltas serão vinculadas à matrícula selecionada." onClose={closeForm}><form onSubmit={handleSubmit(data => saveMutation.mutate({ matriculaId: Number(data.matriculaId), faltas: Number(data.faltas) }))} className="space-y-4">{feedback?.type === 'error' && <InlineError message={feedback.message} />}<FormField label="Matrícula" error={errors.matriculaId?.message}><Select {...register('matriculaId')}><option value="">Selecione</option>{matriculas.map(item => <option key={item.id} value={item.id}>{buildEnrollmentLabel(item, alunos, turmas)}</option>)}</Select></FormField><FormField label="Faltas" error={errors.faltas?.message}><Input type="number" min="0" {...register('faltas')} /></FormField><div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end"><Button variant="ghost" onClick={closeForm}>Cancelar</Button><Button type="submit" disabled={saveMutation.isPending}>{saveMutation.isPending ? 'Salvando...' : editing ? 'Salvar alterações' : 'Lançar frequência'}</Button></div></form></Modal>
       <DeleteConfirmation open={Boolean(deleting)} entityLabel="frequência" itemLabel={deleting ? `#${deleting.id}` : ''} pending={deleteMutation.isPending} error={feedback?.type === 'error' ? feedback.message : undefined} onClose={() => setDeleting(null)} onConfirm={() => deleting && deleteMutation.mutate(deleting.id)} />
     </motion.section>
   );
 }
 
 function AttendanceList({ frequencias, matriculas, alunos, turmas, canManage, onEdit, onDelete }: { frequencias: Frequencia[]; matriculas: Matricula[]; alunos: Awaited<ReturnType<typeof listarAlunos>>; turmas: Awaited<ReturnType<typeof listarTurmas>>; canManage: boolean; onEdit: (item: Frequencia) => void; onDelete: (item: Frequencia) => void }) {
-  return <><div className="hidden md:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Turma</TableHead><TableHead>Matrícula</TableHead><TableHead>Faltas</TableHead>{canManage && <TableHead className="text-right">Ações</TableHead>}</TableRow></TableHeader><TableBody>{frequencias.map(item => { const matricula = resolveMatricula(item, matriculas); const context = matricula ? getMatriculaContext(matricula, alunos, turmas) : null; return <TableRow key={item.id}><TableCell className="font-medium text-foreground">{context?.alunoLabel ?? 'Aluno não identificado'}</TableCell><TableCell>{context?.turmaLabel ?? 'Turma não identificada'}</TableCell><TableCell>#{getFrequenciaMatriculaId(item) ?? '—'}</TableCell><TableCell className="text-destructive">{getFaltas(item)}</TableCell>{canManage && <TableCell><RowActions item={item} label={`frequência ${item.id}`} onEdit={onEdit} onDelete={onDelete} /></TableCell>}</TableRow>; })}</TableBody></Table></div><div className="grid gap-3 md:hidden">{frequencias.map(item => { const matricula = resolveMatricula(item, matriculas); const context = matricula ? getMatriculaContext(matricula, alunos, turmas) : null; return <article key={item.id} className="rounded-2xl border border-border bg-muted/30 p-4"><h3 className="font-medium text-foreground">{context?.alunoLabel ?? 'Aluno não identificado'}</h3><p className="mt-1 text-sm text-muted-foreground">{context?.turmaLabel ?? `Matrícula #${getFrequenciaMatriculaId(item) ?? '—'}`}</p><div className="mt-4 text-sm"><span className="text-destructive">{getFaltas(item)} faltas</span></div>{canManage && <div className="mt-4 border-t border-border pt-3"><RowActions item={item} label={`frequência ${item.id}`} onEdit={onEdit} onDelete={onDelete} /></div>}</article>; })}</div></>;
+  return <><div className="hidden lg:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Matrícula acadêmica</TableHead><TableHead>Disciplina</TableHead><TableHead>Turma / semestre</TableHead><TableHead>Faltas</TableHead>{canManage && <TableHead className="text-right">Ações</TableHead>}</TableRow></TableHeader><TableBody>{frequencias.map(item => { const matricula = resolveMatricula(item, matriculas); const context = getFrequenciaContext(item, matricula, alunos, turmas); return <TableRow key={item.id}><TableCell className="font-medium text-foreground">{context.alunoLabel}</TableCell><TableCell>{context.alunoMatricula}</TableCell><TableCell>{context.disciplinaNome}</TableCell><TableCell>{context.turmaLabel}</TableCell><TableCell className="font-semibold text-destructive">{getFaltas(item)}</TableCell>{canManage && <TableCell><RowActions item={item} label={`frequência ${item.id}`} onEdit={onEdit} onDelete={onDelete} /></TableCell>}</TableRow>; })}</TableBody></Table></div><div className="grid gap-3 lg:hidden">{frequencias.map(item => { const matricula = resolveMatricula(item, matriculas); const context = getFrequenciaContext(item, matricula, alunos, turmas); return <article key={item.id} className="rounded-2xl border border-border bg-muted/30 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-medium text-foreground">{context.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {context.alunoMatricula}</p><p className="mt-2 text-sm text-muted-foreground">{context.disciplinaNome} • {context.turmaLabel}</p></div><span className="font-semibold text-destructive">{getFaltas(item)} faltas</span></div>{canManage && <div className="mt-4 border-t border-border pt-3"><RowActions item={item} label={`frequência ${item.id}`} onEdit={onEdit} onDelete={onDelete} /></div>}</article>; })}</div></>;
+}
+
+function getFrequenciaContext(item: Frequencia, matricula: Matricula | undefined, alunos: Awaited<ReturnType<typeof listarAlunos>>, turmas: Awaited<ReturnType<typeof listarTurmas>>) {
+  const base = matricula ? getMatriculaContext(matricula, alunos, turmas) : null;
+  return {
+    alunoLabel: item.alunoNome || base?.alunoLabel || 'Aluno não identificado',
+    alunoMatricula: item.alunoMatricula || base?.alunoMatricula || 'Não informada',
+    disciplinaNome: item.disciplinaNome || base?.disciplinaNome || 'Disciplina não informada',
+    turmaLabel: item.turmaLabel || item.semestre || base?.turmaLabel || `Matrícula #${getFrequenciaMatriculaId(item) ?? '—'}`,
+  };
 }
 
 function resolveMatricula(item: Frequencia, matriculas: Matricula[]) {
   return item.matricula ?? matriculas.find(matricula => matricula.id === getFrequenciaMatriculaId(item));
+}
+
+function getAttendanceSaveError(error: unknown) {
+  if (!axios.isAxiosError(error)) {
+    return 'Não foi possível salvar a frequência.';
+  }
+
+  switch (error.response?.status) {
+    case 400:
+      return 'Dados inválidos. Verifique matrícula e faltas.';
+    case 403:
+      return 'Seu usuário não tem permissão para realizar essa operação.';
+    case 404:
+      return 'Matrícula não encontrada. Atualize a lista e tente novamente.';
+    case 500:
+      return 'Erro interno ao salvar. Verifique se a matrícula selecionada ainda existe no banco.';
+    default:
+      return getApiErrorMessage(error, 'Não foi possível salvar a frequência.');
+  }
 }
 
 export default Attendance;

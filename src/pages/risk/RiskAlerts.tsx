@@ -113,11 +113,16 @@ function RiskAlerts() {
               <Card className={`h-full ${config?.border ?? 'border-border'}`}>
                 <CardHeader>
                   <div className="flex items-start justify-between gap-4">
-                    <div><CardTitle className="leading-tight">{context.alunoLabel}</CardTitle><CardDescription className="mt-2">{context.turmaLabel} • Matrícula #{matricula.id}</CardDescription></div>
+                    <div><CardTitle className="leading-tight">{context.alunoLabel}</CardTitle><CardDescription className="mt-2">Matrícula {context.alunoMatricula} • {context.turmaLabel}</CardDescription></div>
                     <span className={`mt-1 h-4 w-4 shrink-0 rounded-full shadow-[0_0_14px_3px] ${config?.indicator ?? 'bg-muted shadow-none'}`} aria-label={config?.label ?? 'Risco indisponível'} />
                   </div>
                 </CardHeader>
                 <CardContent>
+                  <dl className="mb-4 grid gap-2 border-b border-border pb-4 text-sm">
+                    <div><dt className="text-xs text-muted-foreground">Disciplina</dt><dd className="text-foreground">{context.disciplinaNome}</dd></div>
+                    <div><dt className="text-xs text-muted-foreground">Professor</dt><dd className="text-foreground">{context.professorNome}</dd></div>
+                    <div><dt className="text-xs text-muted-foreground">Turma / semestre</dt><dd className="text-foreground">{context.turmaLabel}</dd></div>
+                  </dl>
                   {config ? <><span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${config.badge}`}>{config.label}</span><p className="mt-4 text-sm leading-6 text-muted-foreground">{config.description}</p></> : <><span className="inline-flex rounded-full bg-muted px-3 py-1 text-xs font-semibold text-muted-foreground">Indisponível</span><p className="mt-4 text-sm text-muted-foreground">Não foi possível calcular o risco desta matrícula.</p></>}
                 </CardContent>
               </Card>

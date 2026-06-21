@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { motion } from 'framer-motion';
 import { Plus, Search, UserRound } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -46,20 +47,85 @@ import {
   getProfessorSpecialty,
   listarProfessores,
   type Professor,
-  type ProfessorPayload,
 } from '@/services/professorService';
 
-const professorSchema = z.object({
-  usuarioId: z.coerce.number<number>().int().positive('Informe o ID do usuário.'),
-  titulacao: z.string().trim().min(2, 'Informe a titulação.'),
-});
+const professorSchema = z
+  .object({
+    editing: z.boolean(),
+    nome: z.string(),
+    cpf: z.string(),
+    email: z.string(),
+    senha: z.string(),
+    titulacao: z.string().trim().min(2, 'Informe a titulação.'),
+  })
+  .superRefine((data, context) => {
+    if (data.editing) return;
+
+    if (data.nome.trim().length < 2) {
+      context.addIssue({
+        code: 'custom',
+        path: ['nome'],
+        message: 'Informe o nome.',
+      });
+    }
+    if (!/^\d{11}$/.test(data.cpf.trim())) {
+      context.addIssue({
+        code: 'custom',
+        path: ['cpf'],
+        message: 'O CPF deve conter exatamente 11 dígitos.',
+      });
+    }
+    if (!z.string().email().safeParse(data.email.trim()).success) {
+      context.addIssue({
+        code: 'custom',
+        path: ['email'],
+        message: 'Informe um email válido.',
+      });
+    }
+    if (data.senha.trim().length < 6) {
+      context.addIssue({
+        code: 'custom',
+        path: ['senha'],
+        message: 'A senha deve ter pelo menos 6 caracteres.',
+      });
+    }
+  });
 
 type ProfessorFormData = z.infer<typeof professorSchema>;
 
 const emptyForm: ProfessorFormData = {
-  usuarioId: 0,
+  editing: false,
+  nome: '',
+  cpf: '',
+  email: '',
+  senha: '',
   titulacao: '',
 };
+
+function getProfessorSaveError(error: unknown, editing: boolean) {
+  if (!axios.isAxiosError(error)) {
+    return 'Não foi possível salvar o professor.';
+  }
+
+  if (!error.response) {
+    return 'Backend indisponível. Verifique sua conexão e tente novamente.';
+  }
+
+  switch (error.response.status) {
+    case 400:
+      return 'Dados inválidos. Verifique os campos preenchidos, incluindo o CPF obrigatório.';
+    case 401:
+      return 'Sua sessão expirou. Entre novamente para continuar.';
+    case 403:
+      return editing
+        ? 'Seu usuário não tem permissão para editar professores. Faça login com uma conta ADMIN.'
+        : 'Seu usuário não tem permissão para cadastrar professores. Faça login com uma conta ADMIN.';
+    case 409:
+      return 'Já existe um cadastro com este email ou CPF.';
+    default:
+      return getApiErrorMessage(error, 'Não foi possível salvar o professor.');
+  }
+}
 
 function Professors() {
   const queryClient = useQueryClient();
@@ -74,7 +140,6 @@ function Professors() {
     queryKey: ['professores'],
     queryFn: listarProfessores,
   });
-
   const {
     register,
     handleSubmit,
@@ -93,10 +158,16 @@ function Professors() {
   };
 
   const saveMutation = useMutation({
-    mutationFn: (payload: ProfessorPayload) =>
+    mutationFn: (data: ProfessorFormData) =>
       editing
-        ? atualizarProfessor(editing.id, payload)
-        : criarProfessor(payload),
+        ? atualizarProfessor(editing.id, { titulacao: data.titulacao })
+        : criarProfessor({
+            nome: data.nome.trim(),
+            cpf: data.cpf.trim(),
+            email: data.email.trim(),
+            senha: data.senha,
+            titulacao: data.titulacao,
+          }),
     onSuccess: async () => {
       const action = editing ? 'atualizado' : 'cadastrado';
       await refreshData();
@@ -109,10 +180,7 @@ function Professors() {
     onError: error =>
       setFeedback({
         type: 'error',
-        message: getApiErrorMessage(
-          error,
-          'Não foi possível salvar o professor.',
-        ),
+        message: getProfessorSaveError(error, Boolean(editing)),
       }),
   });
 
@@ -143,6 +211,8 @@ function Professors() {
     return (professoresQuery.data ?? []).filter(professor =>
       [
         getProfessorName(professor),
+        professor.cpf,
+        professor.email,
         getProfessorSpecialty(professor),
       ]
         .filter(Boolean)
@@ -163,7 +233,11 @@ function Professors() {
     setEditing(professor);
     setFeedback(null);
     reset({
-      usuarioId: 0,
+      editing: true,
+      nome: professor.nome,
+      cpf: professor.cpf,
+      email: professor.email,
+      senha: '',
       titulacao: getProfessorSpecialty(professor),
     });
     setFormOpen(true);
@@ -235,7 +309,7 @@ function Professors() {
           ) : (
             <ProfessorList
               professores={filtered}
-              canManage={false}
+              canManage={canManage}
               onEdit={openEdit}
               onDelete={item => {
                 setFeedback(null);
@@ -259,9 +333,27 @@ function Professors() {
           {feedback?.type === 'error' && (
             <InlineError message={feedback.message} />
           )}
-          <FormField label="ID do usuário" error={errors.usuarioId?.message}>
-            <Input type="number" min="1" {...register('usuarioId')} />
-          </FormField>
+          {!editing && (
+            <>
+              <FormField label="Nome" error={errors.nome?.message}>
+                <Input placeholder="Nome completo" {...register('nome')} />
+              </FormField>
+              <FormField label="CPF" error={errors.cpf?.message}>
+                <Input
+                  inputMode="numeric"
+                  maxLength={11}
+                  placeholder="Somente 11 dígitos"
+                  {...register('cpf')}
+                />
+              </FormField>
+              <FormField label="Email" error={errors.email?.message}>
+                <Input type="email" placeholder="professor@ifal.edu.br" {...register('email')} />
+              </FormField>
+              <FormField label="Senha" error={errors.senha?.message}>
+                <Input type="password" placeholder="Mínimo de 6 caracteres" {...register('senha')} />
+              </FormField>
+            </>
+          )}
           <FormField label="Titulação" error={errors.titulacao?.message}>
             <Input placeholder="Ex.: Mestre" {...register('titulacao')} />
           </FormField>
@@ -335,6 +427,9 @@ function ProfessorList({
           <TableHeader>
             <TableRow>
               <TableHead>ID</TableHead>
+              <TableHead>Nome</TableHead>
+              <TableHead>CPF</TableHead>
+              <TableHead>Email</TableHead>
               <TableHead>Titulação</TableHead>
               {canManage && <TableHead className="text-right">Ações</TableHead>}
             </TableRow>
@@ -345,6 +440,9 @@ function ProfessorList({
                 <TableCell className="font-medium text-foreground">
                   #{professor.id}
                 </TableCell>
+                <TableCell>{professor.nome}</TableCell>
+                <TableCell>{professor.cpf || '—'}</TableCell>
+                <TableCell>{professor.email || '—'}</TableCell>
                 <TableCell>{getProfessorSpecialty(professor) || '—'}</TableCell>
                 {canManage && (
                   <TableCell>
@@ -370,6 +468,12 @@ function ProfessorList({
             <h3 className="font-medium text-foreground">
               {getProfessorName(professor)}
             </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {professor.cpf || 'CPF não informado'}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {professor.email || 'Email não informado'}
+            </p>
             <p className="mt-1 text-sm text-muted-foreground">
               {getProfessorSpecialty(professor) || 'Especialidade não informada'}
             </p>

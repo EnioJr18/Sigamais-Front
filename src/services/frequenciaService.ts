@@ -8,6 +8,12 @@ export interface Frequencia {
   matricula?: Matricula;
   faltas?: number;
   absences?: number;
+  alunoNome?: string;
+  alunoMatricula?: string;
+  disciplinaNome?: string;
+  professorNome?: string;
+  turmaLabel?: string;
+  semestre?: string;
 }
 
 export interface FrequenciaPayload {
@@ -15,15 +21,34 @@ export interface FrequenciaPayload {
   faltas: number;
 }
 
+function normalizeFrequencia(frequencia: Frequencia): Frequencia {
+  return {
+    ...frequencia,
+    matriculaId: frequencia.matriculaId ?? frequencia.matricula?.id,
+    faltas: Number(frequencia.faltas ?? frequencia.absences ?? 0),
+    alunoNome: frequencia.alunoNome || frequencia.matricula?.alunoNome,
+    alunoMatricula:
+      frequencia.alunoMatricula || frequencia.matricula?.alunoMatricula,
+    disciplinaNome:
+      frequencia.disciplinaNome || frequencia.matricula?.disciplinaNome,
+    professorNome:
+      frequencia.professorNome || frequencia.matricula?.professorNome,
+    turmaLabel: frequencia.turmaLabel || frequencia.matricula?.turmaLabel,
+    semestre: frequencia.semestre || frequencia.matricula?.semestre,
+  };
+}
+
 export async function listarFrequencias() {
-  // PENDÊNCIA BACKEND: não existe GET /frequencias; apenas GET /frequencias/matriculas/{id}.
   const response = await api.get('/frequencias');
-  return extractList<Frequencia>(response.data);
+  return extractList<Frequencia>(response.data).map(normalizeFrequencia);
 }
 
 export async function criarFrequencia(payload: FrequenciaPayload) {
-  const response = await api.post<Frequencia>('/frequencias', payload);
-  return response.data;
+  const response = await api.post<Frequencia>('/frequencias', {
+    matriculaId: Number(payload.matriculaId),
+    faltas: Number(payload.faltas),
+  });
+  return normalizeFrequencia(response.data);
 }
 
 export async function atualizarFrequencia(
@@ -31,8 +56,11 @@ export async function atualizarFrequencia(
   payload: FrequenciaPayload,
 ) {
   // PENDÊNCIA BACKEND: não existe PUT /frequencias/{id}.
-  const response = await api.put<Frequencia>(`/frequencias/${id}`, payload);
-  return response.data;
+  const response = await api.put<Frequencia>(`/frequencias/${id}`, {
+    matriculaId: Number(payload.matriculaId),
+    faltas: Number(payload.faltas),
+  });
+  return normalizeFrequencia(response.data);
 }
 
 export async function excluirFrequencia(id: number) {

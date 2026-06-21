@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { motion } from 'framer-motion';
 import { Calculator, Plus, Search } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -24,7 +25,7 @@ import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { getMatriculaContext } from '@/lib/academic';
+import { buildEnrollmentLabel, getMatriculaContext } from '@/lib/academic';
 import { canManageAcademicRecords } from '@/lib/rbac';
 import { listarAlunos } from '@/services/alunoService';
 import { getApiErrorMessage } from '@/services/http';
@@ -82,7 +83,12 @@ function Grades() {
       setFeedback({ type: 'success', message: `Nota ${action} com sucesso.` });
       closeForm();
     },
-    onError: error => setFeedback({ type: 'error', message: getApiErrorMessage(error, 'Não foi possível salvar a nota.') }),
+    onError: error => {
+      if (axios.isAxiosError(error) && error.response?.status === 404) {
+        void queryClient.invalidateQueries({ queryKey: ['matriculas'] });
+      }
+      setFeedback({ type: 'error', message: getGradeSaveError(error) });
+    },
   });
 
   const deleteMutation = useMutation({
@@ -100,8 +106,8 @@ function Grades() {
     if (!term) return notasQuery.data ?? [];
     return (notasQuery.data ?? []).filter(nota => {
       const matricula = resolveMatricula(nota, matriculas);
-      const context = matricula ? getMatriculaContext(matricula, alunos, turmas) : null;
-      return [nota.id, getNotaMatriculaId(nota), getNotaValue(nota), context?.alunoLabel, context?.turmaLabel]
+      const context = getNotaContext(nota, matricula, alunos, turmas);
+      return [nota.id, getNotaMatriculaId(nota), getNotaValue(nota), nota.tipo, context.alunoLabel, context.alunoMatricula, context.disciplinaNome, context.turmaLabel]
         .filter(value => value !== undefined)
         .join(' ')
         .toLocaleLowerCase('pt-BR')
@@ -149,9 +155,9 @@ function Grades() {
       </Card>
 
       <Modal open={formOpen} title={editing ? 'Editar nota' : 'Lançar nota'} description="A nota será vinculada à matrícula selecionada." onClose={closeForm}>
-        <form onSubmit={handleSubmit(data => saveMutation.mutate(data))} className="space-y-4">
+        <form onSubmit={handleSubmit(data => saveMutation.mutate({ matriculaId: Number(data.matriculaId), valor: Number(data.valor), tipo: data.tipo }))} className="space-y-4">
           {feedback?.type === 'error' && <InlineError message={feedback.message} />}
-          <FormField label="Matrícula" error={errors.matriculaId?.message}><Select {...register('matriculaId')}><option value="">Selecione</option>{matriculas.map(item => { const context = getMatriculaContext(item, alunos, turmas); return <option key={item.id} value={item.id}>#{item.id} — {context.alunoLabel} / {context.turmaLabel}</option>; })}</Select></FormField>
+          <FormField label="Matrícula" error={errors.matriculaId?.message}><Select {...register('matriculaId')}><option value="">Selecione</option>{matriculas.map(item => <option key={item.id} value={item.id}>{buildEnrollmentLabel(item, alunos, turmas)}</option>)}</Select></FormField>
           <FormField label="Nota" error={errors.valor?.message}><Input type="number" min="0" max="10" step="0.1" {...register('valor')} /></FormField>
           <FormField label="Tipo da avaliação" error={errors.tipo?.message}><Input placeholder="Ex.: PROVA, TRABALHO" {...register('tipo')} /></FormField>
           <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end"><Button variant="ghost" onClick={closeForm}>Cancelar</Button><Button type="submit" disabled={saveMutation.isPending}>{saveMutation.isPending ? 'Salvando...' : editing ? 'Salvar alterações' : 'Lançar nota'}</Button></div>
@@ -164,11 +170,40 @@ function Grades() {
 }
 
 function GradeList({ notas, matriculas, alunos, turmas, canManage, onEdit, onDelete }: { notas: Nota[]; matriculas: Matricula[]; alunos: Awaited<ReturnType<typeof listarAlunos>>; turmas: Awaited<ReturnType<typeof listarTurmas>>; canManage: boolean; onEdit: (item: Nota) => void; onDelete: (item: Nota) => void }) {
-  return <><div className="hidden md:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Turma</TableHead><TableHead>Matrícula</TableHead><TableHead>Nota</TableHead>{canManage && <TableHead className="text-right">Ações</TableHead>}</TableRow></TableHeader><TableBody>{notas.map(nota => { const matricula = resolveMatricula(nota, matriculas); const context = matricula ? getMatriculaContext(matricula, alunos, turmas) : null; return <TableRow key={nota.id}><TableCell className="font-medium text-foreground">{context?.alunoLabel ?? 'Aluno não identificado'}</TableCell><TableCell>{context?.turmaLabel ?? 'Turma não identificada'}</TableCell><TableCell>#{getNotaMatriculaId(nota) ?? '—'}</TableCell><TableCell><span className="font-semibold text-primary">{getNotaValue(nota).toLocaleString('pt-BR', { minimumFractionDigits: 1 })}</span></TableCell>{canManage && <TableCell><RowActions item={nota} label={`nota ${nota.id}`} onEdit={onEdit} onDelete={onDelete} /></TableCell>}</TableRow>; })}</TableBody></Table></div><div className="grid gap-3 md:hidden">{notas.map(nota => { const matricula = resolveMatricula(nota, matriculas); const context = matricula ? getMatriculaContext(matricula, alunos, turmas) : null; return <article key={nota.id} className="rounded-2xl border border-border bg-muted/30 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-medium text-foreground">{context?.alunoLabel ?? 'Aluno não identificado'}</h3><p className="mt-1 text-sm text-muted-foreground">{context?.turmaLabel ?? `Matrícula #${getNotaMatriculaId(nota) ?? '—'}`}</p></div><span className="text-xl font-semibold text-primary">{getNotaValue(nota).toLocaleString('pt-BR', { minimumFractionDigits: 1 })}</span></div>{canManage && <div className="mt-4 border-t border-border pt-3"><RowActions item={nota} label={`nota ${nota.id}`} onEdit={onEdit} onDelete={onDelete} /></div>}</article>; })}</div></>;
+  return <><div className="hidden lg:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Matrícula acadêmica</TableHead><TableHead>Disciplina</TableHead><TableHead>Turma / semestre</TableHead><TableHead>Valor</TableHead><TableHead>Tipo</TableHead>{canManage && <TableHead className="text-right">Ações</TableHead>}</TableRow></TableHeader><TableBody>{notas.map(nota => { const matricula = resolveMatricula(nota, matriculas); const context = getNotaContext(nota, matricula, alunos, turmas); return <TableRow key={nota.id}><TableCell className="font-medium text-foreground">{context.alunoLabel}</TableCell><TableCell>{context.alunoMatricula}</TableCell><TableCell>{context.disciplinaNome}</TableCell><TableCell>{context.turmaLabel}</TableCell><TableCell><span className="font-semibold text-primary">{getNotaValue(nota).toLocaleString('pt-BR', { minimumFractionDigits: 1 })}</span></TableCell><TableCell>{nota.tipo || 'Não informado'}</TableCell>{canManage && <TableCell><RowActions item={nota} label={`nota ${nota.id}`} onEdit={onEdit} onDelete={onDelete} /></TableCell>}</TableRow>; })}</TableBody></Table></div><div className="grid gap-3 lg:hidden">{notas.map(nota => { const matricula = resolveMatricula(nota, matriculas); const context = getNotaContext(nota, matricula, alunos, turmas); return <article key={nota.id} className="rounded-2xl border border-border bg-muted/30 p-4"><div className="flex items-start justify-between gap-3"><div><h3 className="font-medium text-foreground">{context.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {context.alunoMatricula}</p><p className="mt-2 text-sm text-muted-foreground">{context.disciplinaNome} • {context.turmaLabel}</p></div><div className="text-right"><span className="text-xl font-semibold text-primary">{getNotaValue(nota).toLocaleString('pt-BR', { minimumFractionDigits: 1 })}</span><p className="mt-1 text-xs text-muted-foreground">{nota.tipo || 'Não informado'}</p></div></div>{canManage && <div className="mt-4 border-t border-border pt-3"><RowActions item={nota} label={`nota ${nota.id}`} onEdit={onEdit} onDelete={onDelete} /></div>}</article>; })}</div></>;
+}
+
+function getNotaContext(nota: Nota, matricula: Matricula | undefined, alunos: Awaited<ReturnType<typeof listarAlunos>>, turmas: Awaited<ReturnType<typeof listarTurmas>>) {
+  const base = matricula ? getMatriculaContext(matricula, alunos, turmas) : null;
+  return {
+    alunoLabel: nota.alunoNome || base?.alunoLabel || 'Aluno não identificado',
+    alunoMatricula: nota.alunoMatricula || base?.alunoMatricula || 'Não informada',
+    disciplinaNome: nota.disciplinaNome || base?.disciplinaNome || 'Disciplina não informada',
+    turmaLabel: nota.turmaLabel || nota.semestre || base?.turmaLabel || `Matrícula #${getNotaMatriculaId(nota) ?? '—'}`,
+  };
 }
 
 function resolveMatricula(nota: Nota, matriculas: Matricula[]) {
   return nota.matricula ?? matriculas.find(item => item.id === getNotaMatriculaId(nota));
+}
+
+function getGradeSaveError(error: unknown) {
+  if (!axios.isAxiosError(error)) {
+    return 'Não foi possível salvar a nota.';
+  }
+
+  switch (error.response?.status) {
+    case 400:
+      return 'Dados inválidos. Verifique matrícula, valor e tipo.';
+    case 403:
+      return 'Seu usuário não tem permissão para realizar essa operação.';
+    case 404:
+      return 'Matrícula não encontrada. Atualize a lista e tente novamente.';
+    case 500:
+      return 'Erro interno ao salvar. Verifique se a matrícula selecionada ainda existe no banco.';
+    default:
+      return getApiErrorMessage(error, 'Não foi possível salvar a nota.');
+  }
 }
 
 export default Grades;

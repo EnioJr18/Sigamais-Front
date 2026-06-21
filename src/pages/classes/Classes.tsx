@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import axios from 'axios';
 import { motion } from 'framer-motion';
 import { GraduationCap, Plus, Search } from 'lucide-react';
 import { useForm } from 'react-hook-form';
@@ -54,8 +55,6 @@ import {
   criarTurma,
   excluirTurma,
   getTurmaName,
-  getTurmaRoom,
-  getTurmaShift,
   getTurmaYear,
   listarTurmas,
   type Turma,
@@ -71,16 +70,43 @@ const turmaSchema = z.object({
     .max(2100, 'Informe um ano válido.'),
   professorId: z.coerce.number<number>().int().positive('Selecione o professor.'),
   disciplinaId: z.coerce.number<number>().int().positive('Selecione a disciplina.'),
+  vagas: z.coerce
+    .number<number>({ error: 'Informe a quantidade de vagas.' })
+    .int('Use uma quantidade inteira de vagas.')
+    .positive('A quantidade de vagas deve ser maior que zero.'),
 });
 
 type TurmaFormData = z.infer<typeof turmaSchema>;
 
 const emptyForm: TurmaFormData = {
-  semestre: '1',
+  semestre: `${new Date().getFullYear()}.1`,
   ano: new Date().getFullYear(),
   professorId: 0,
   disciplinaId: 0,
+  vagas: 40,
 };
+
+function getTurmaSaveError(error: unknown) {
+  if (!axios.isAxiosError(error)) {
+    return 'Não foi possível salvar a turma.';
+  }
+  if (!error.response) {
+    return 'Não foi possível conectar à API.';
+  }
+
+  switch (error.response.status) {
+    case 400:
+      return 'Dados inválidos para criar turma. Verifique professor, disciplina, semestre, ano e vagas.';
+    case 401:
+      return 'Sessão expirada. Faça login novamente.';
+    case 403:
+      return 'Seu usuário não tem permissão para cadastrar turmas.';
+    case 409:
+      return 'Já existe uma turma com esses dados ou há conflito de regra de negócio.';
+    default:
+      return getApiErrorMessage(error, 'Não foi possível salvar a turma.');
+  }
+}
 
 function Classes() {
   const queryClient = useQueryClient();
@@ -144,7 +170,7 @@ function Classes() {
     onError: error =>
       setFeedback({
         type: 'error',
-        message: getApiErrorMessage(error, 'Não foi possível salvar a turma.'),
+        message: getTurmaSaveError(error),
       }),
   });
 
@@ -167,16 +193,14 @@ function Classes() {
     if (!term) return turmasQuery.data ?? [];
 
     return (turmasQuery.data ?? []).filter(turma => {
-      const professor = resolveProfessor(turma, professores);
-      const disciplina = resolveDisciplina(turma, disciplinas);
+      const professorNome = resolveProfessorName(turma, professores);
+      const disciplinaNome = resolveDisciplinaName(turma, disciplinas);
 
       return [
         getTurmaName(turma),
         getTurmaYear(turma),
-        getTurmaShift(turma),
-        getTurmaRoom(turma),
-        professor ? getProfessorName(professor) : turma.professorId,
-        disciplina ? getDisciplinaName(disciplina) : turma.disciplinaId,
+        professorNome,
+        disciplinaNome,
       ]
         .filter(Boolean)
         .join(' ')
@@ -202,8 +226,9 @@ function Classes() {
     reset({
       semestre: turma.semestre ?? '',
       ano: Number(getTurmaYear(turma)) || new Date().getFullYear(),
-      professorId: turma.professorId ?? turma.professor?.id ?? 0,
-      disciplinaId: turma.disciplinaId ?? turma.disciplina?.id ?? 0,
+      professorId: turma.professorId ?? 0,
+      disciplinaId: turma.disciplinaId ?? 0,
+      vagas: turma.vagas ?? 40,
     });
     setFormOpen(true);
   }
@@ -333,10 +358,13 @@ function Classes() {
           )}
           <div className="grid gap-4 sm:grid-cols-2">
             <FormField label="Semestre" error={errors.semestre?.message}>
-              <Input placeholder="Ex.: 1" {...register('semestre')} />
+              <Input placeholder="Ex.: 2026.1" {...register('semestre')} />
             </FormField>
             <FormField label="Ano" error={errors.ano?.message}>
               <Input type="number" {...register('ano')} />
+            </FormField>
+            <FormField label="Vagas" error={errors.vagas?.message}>
+              <Input type="number" min="1" {...register('vagas')} />
             </FormField>
             <FormField
               label="Professor responsável"
@@ -414,9 +442,9 @@ function ClassList({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Turma</TableHead>
-              <TableHead>Ano / turno</TableHead>
-              <TableHead>Sala / vagas</TableHead>
+              <TableHead>Semestre</TableHead>
+              <TableHead>Ano</TableHead>
+              <TableHead>Vagas</TableHead>
               <TableHead>Professor</TableHead>
               <TableHead>Disciplina</TableHead>
               {canManage && <TableHead className="text-right">Ações</TableHead>}
@@ -424,8 +452,8 @@ function ClassList({
           </TableHeader>
           <TableBody>
             {turmas.map(turma => {
-              const professor = resolveProfessor(turma, professores);
-              const disciplina = resolveDisciplina(turma, disciplinas);
+              const professorNome = resolveProfessorName(turma, professores);
+              const disciplinaNome = resolveDisciplinaName(turma, disciplinas);
 
               return (
                 <TableRow key={turma.id}>
@@ -433,28 +461,16 @@ function ClassList({
                     {getTurmaName(turma)}
                   </TableCell>
                   <TableCell>
-                    {[getTurmaYear(turma), getTurmaShift(turma)]
-                      .filter(Boolean)
-                      .join(' • ') || '—'}
+                    {getTurmaYear(turma) || '—'}
                   </TableCell>
                   <TableCell>
-                    {[getTurmaRoom(turma), turma.vagas ? `${turma.vagas} vagas` : '']
-                      .filter(Boolean)
-                      .join(' • ') || '—'}
+                    {turma.vagas ?? '—'}
                   </TableCell>
                   <TableCell>
-                    {professor
-                      ? getProfessorName(professor)
-                      : turma.professorId
-                        ? `Professor #${turma.professorId}`
-                        : '—'}
+                    {professorNome}
                   </TableCell>
                   <TableCell>
-                    {disciplina
-                      ? getDisciplinaName(disciplina)
-                      : turma.disciplinaId
-                        ? `Disciplina #${turma.disciplinaId}`
-                        : '—'}
+                    {disciplinaNome}
                   </TableCell>
                   {canManage && (
                     <TableCell>
@@ -474,8 +490,8 @@ function ClassList({
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:hidden">
         {turmas.map(turma => {
-          const professor = resolveProfessor(turma, professores);
-          const disciplina = resolveDisciplina(turma, disciplinas);
+          const professorNome = resolveProfessorName(turma, professores);
+          const disciplinaNome = resolveDisciplinaName(turma, disciplinas);
 
           return (
             <article
@@ -489,13 +505,11 @@ function ClassList({
                 </span>
               </div>
               <dl className="mt-4 grid gap-3 text-sm">
-                <Relation label="Professor" value={professor ? getProfessorName(professor) : turma.professorId ? `#${turma.professorId}` : '—'} />
-                <Relation label="Disciplina" value={disciplina ? getDisciplinaName(disciplina) : turma.disciplinaId ? `#${turma.disciplinaId}` : '—'} />
+                <Relation label="Professor" value={professorNome} />
+                <Relation label="Disciplina" value={disciplinaNome} />
                 <Relation
-                  label="Turno e sala"
-                  value={[getTurmaShift(turma), getTurmaRoom(turma)]
-                    .filter(Boolean)
-                    .join(' • ') || '—'}
+                  label="Vagas"
+                  value={turma.vagas === undefined ? 'Não informadas' : String(turma.vagas)}
                 />
               </dl>
               {canManage && (
@@ -525,17 +539,21 @@ function Relation({ label, value }: { label: string; value: string }) {
   );
 }
 
-function resolveProfessor(turma: Turma, professores: Professor[]) {
+function resolveProfessorName(turma: Turma, professores: Professor[]) {
+  const professor = professores.find(item => item.id === turma.professorId);
   return (
-    turma.professor ??
-    professores.find(professor => professor.id === turma.professorId)
+    turma.professorNome ||
+    (professor ? getProfessorName(professor) : '') ||
+    (turma.professorId ? `Professor #${turma.professorId}` : 'Professor não informado')
   );
 }
 
-function resolveDisciplina(turma: Turma, disciplinas: Disciplina[]) {
+function resolveDisciplinaName(turma: Turma, disciplinas: Disciplina[]) {
+  const disciplina = disciplinas.find(item => item.id === turma.disciplinaId);
   return (
-    turma.disciplina ??
-    disciplinas.find(disciplina => disciplina.id === turma.disciplinaId)
+    turma.disciplinaNome ||
+    (disciplina ? getDisciplinaName(disciplina) : '') ||
+    (turma.disciplinaId ? `Disciplina #${turma.disciplinaId}` : 'Disciplina não informada')
   );
 }
 

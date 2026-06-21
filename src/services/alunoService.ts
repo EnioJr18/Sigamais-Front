@@ -10,6 +10,10 @@ export interface Aluno {
   curso?: string;
   name?: string;
   registration?: string;
+  usuario?: {
+    nome?: string;
+    email?: string;
+  };
 }
 
 export interface AlunoPayload {
@@ -24,9 +28,12 @@ export interface AlunoPayload {
 }
 
 export async function listarAlunos() {
-  // PENDÊNCIA BACKEND: o AlunoController atual não expõe GET /alunos.
   const response = await api.get('/alunos');
-  return extractList<Aluno>(response.data);
+  return extractList<Aluno>(response.data).map(aluno => ({
+    ...aluno,
+    nome: aluno.nome || aluno.usuario?.nome || `Aluno #${aluno.id}`,
+    email: aluno.email || aluno.usuario?.email,
+  }));
 }
 
 export async function buscarAlunoPorId(id: number) {
@@ -47,7 +54,6 @@ export async function atualizarAluno(id: number, payload: AlunoPayload) {
 }
 
 export async function excluirAluno(id: number) {
-  // PENDÊNCIA BACKEND: não existe DELETE /alunos/{id}.
   await api.delete(`/alunos/${id}`);
 }
 
