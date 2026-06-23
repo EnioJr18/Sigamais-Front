@@ -21,6 +21,17 @@ export interface FrequenciaPayload {
   faltas: number;
 }
 
+export interface FrequenciaResumo {
+  matriculaId: number;
+  alunoNome: string;
+  alunoMatricula: string;
+  disciplinaNome: string;
+  professorNome: string;
+  semestre: string;
+  totalFaltas: number;
+  quantidadeRegistros: number;
+}
+
 function normalizeFrequencia(frequencia: Frequencia): Frequencia {
   return {
     ...frequencia,
@@ -41,6 +52,26 @@ function normalizeFrequencia(frequencia: Frequencia): Frequencia {
 export async function listarFrequencias() {
   const response = await api.get('/frequencias');
   return extractList<Frequencia>(response.data).map(normalizeFrequencia);
+}
+
+export async function buscarResumoFrequencias() {
+  const response = await api.get('/frequencias/resumo');
+  return extractList<FrequenciaResumo>(response.data).map(item => ({
+    ...item,
+    matriculaId: Number(item.matriculaId),
+    totalFaltas: Number(item.totalFaltas),
+    quantidadeRegistros: Number(item.quantidadeRegistros),
+  }));
+}
+
+export async function buscarResumoFrequenciasProfessor() {
+  const response = await api.get('/usuarios/me/professor/frequencias');
+  return extractList<FrequenciaResumo>(response.data).map(item => ({
+    ...item,
+    matriculaId: Number(item.matriculaId),
+    totalFaltas: Number(item.totalFaltas),
+    quantidadeRegistros: Number(item.quantidadeRegistros),
+  }));
 }
 
 export async function criarFrequencia(payload: FrequenciaPayload) {

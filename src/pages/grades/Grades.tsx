@@ -26,12 +26,14 @@ import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { buildEnrollmentLabel, getMatriculaContext } from '@/lib/academic';
-import { canManageAcademicRecords } from '@/lib/rbac';
+import { normalizeUserRole } from '@/lib/rbac';
 import { listarAlunos } from '@/services/alunoService';
 import { getApiErrorMessage } from '@/services/http';
 import { listarMatriculas, type Matricula } from '@/services/matriculaService';
 import {
   atualizarNota,
+  buscarResumoNotas,
+  buscarResumoNotasProfessor,
   criarNota,
   excluirNota,
   getNotaMatriculaId,
@@ -39,7 +41,10 @@ import {
   listarNotas,
   type Nota,
   type NotaPayload,
+  type NotaResumo,
+  type SituacaoNota,
 } from '@/services/notaService';
+import { getMeuPerfil } from '@/services/profileService';
 import { listarTurmas } from '@/services/turmaService';
 
 const notaSchema = z.object({
@@ -52,14 +57,23 @@ type NotaFormData = z.infer<typeof notaSchema>;
 
 function Grades() {
   const queryClient = useQueryClient();
-  const canManage = canManageAcademicRecords();
   const [search, setSearch] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Nota | null>(null);
   const [deleting, setDeleting] = useState<Nota | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
-  const notasQuery = useQuery({ queryKey: ['notas'], queryFn: listarNotas });
+  const profileQuery = useQuery({ queryKey: ['meu-perfil'], queryFn: getMeuPerfil });
+  const role = normalizeUserRole(profileQuery.data?.perfil);
+  const isAdmin = role === 'ADMIN';
+  const isProfessor = role === 'PROFESSOR';
+  const canManage = isAdmin || isProfessor;
+  const notasQuery = useQuery({ queryKey: ['notas'], queryFn: listarNotas, enabled: isAdmin });
+  const resumoQuery = useQuery({
+    queryKey: ['notas-resumo', role],
+    queryFn: isProfessor ? buscarResumoNotasProfessor : buscarResumoNotas,
+    enabled: isAdmin || isProfessor,
+  });
   const matriculasQuery = useQuery({ queryKey: ['matriculas'], queryFn: listarMatriculas });
   const alunosQuery = useQuery({ queryKey: ['alunos'], queryFn: listarAlunos });
   const turmasQuery = useQuery({ queryKey: ['turmas'], queryFn: listarTurmas });
@@ -73,7 +87,12 @@ function Grades() {
     defaultValues: { matriculaId: 0, valor: 0, tipo: 'AVALIACAO' },
   });
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['notas'] });
+  const refresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['notas'] }),
+      queryClient.invalidateQueries({ queryKey: ['notas-resumo'] }),
+    ]);
+  };
 
   const saveMutation = useMutation({
     mutationFn: (payload: NotaPayload) => editing ? atualizarNota(editing.id, payload) : criarNota(payload),
@@ -114,10 +133,17 @@ function Grades() {
         .includes(term);
     });
   }, [alunos, matriculas, notasQuery.data, search, turmas]);
-  const summaries = useMemo(
-    () => buildGradeSummaries(filtered, matriculas, alunos, turmas),
-    [alunos, filtered, matriculas, turmas],
+  const fallbackSummaries = useMemo(
+    () => isAdmin ? buildGradeSummaries(filtered, matriculas, alunos, turmas) : [],
+    [alunos, filtered, isAdmin, matriculas, turmas],
   );
+  const summaries = useMemo(() => {
+    if (!resumoQuery.isSuccess) return fallbackSummaries;
+    const term = search.trim().toLocaleLowerCase('pt-BR');
+    return resumoQuery.data
+      .map(mapNotaResumo)
+      .filter(item => !term || [item.alunoLabel, item.alunoMatricula, item.disciplinaNome, item.professorNome, item.turmaLabel, item.situacao].join(' ').toLocaleLowerCase('pt-BR').includes(term));
+  }, [fallbackSummaries, resumoQuery.data, resumoQuery.isSuccess, search]);
 
   function openCreate() {
     setEditing(null);
@@ -150,20 +176,18 @@ function Grades() {
 
       <Card>
         <CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-          <div><CardTitle>Resumo de desempenho</CardTitle><CardDescription className="mt-2">Médias calculadas por matrícula e disciplina.</CardDescription></div>
+          <div><CardTitle>Resumo de desempenho</CardTitle><CardDescription className="mt-2">{resumoQuery.isSuccess ? 'Dados consolidados pela API.' : 'Resumo local temporário baseado nos lançamentos individuais.'}</CardDescription></div>
           <div className="relative w-full sm:max-w-sm"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar aluno, turma, matrícula ou nota" className="pl-9" /></div>
         </CardHeader>
         <CardContent>
-          {notasQuery.isLoading ? <LoadingState label="Carregando notas..." /> : notasQuery.isError ? <ErrorMessage message="Não foi possível consultar as notas." onRetry={() => notasQuery.refetch()} /> : filtered.length === 0 ? <EmptyState icon={Calculator} title={search ? 'Nenhuma nota encontrada' : 'Nenhuma nota registrada'} description={search ? 'Tente buscar por outro termo.' : 'Lance a primeira nota para uma matrícula.'} action={canManage && !search && matriculas.length > 0 ? <Button size="sm" onClick={openCreate}>Lançar nota</Button> : undefined} /> : <GradeSummaryList summaries={summaries} />}
+          {resumoQuery.isLoading && notasQuery.isLoading ? <LoadingState label="Carregando resumo de notas..." /> : resumoQuery.isError && notasQuery.isError ? <ErrorMessage message="Não foi possível consultar o resumo nem os lançamentos de notas." onRetry={() => { resumoQuery.refetch(); notasQuery.refetch(); }} /> : summaries.length === 0 ? <EmptyState icon={Calculator} title={search ? 'Nenhum resumo encontrado' : 'Nenhuma nota registrada'} description={search ? 'Tente buscar por outro termo.' : 'Lance a primeira nota para uma matrícula.'} action={canManage && !search && matriculas.length > 0 ? <Button size="sm" onClick={openCreate}>Lançar nota</Button> : undefined} /> : <GradeSummaryList summaries={summaries} />}
         </CardContent>
       </Card>
 
-      {filtered.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Lançamentos individuais</CardTitle><CardDescription>Histórico detalhado das {filtered.length} notas encontradas.</CardDescription></CardHeader>
-          <CardContent><GradeList notas={filtered} matriculas={matriculas} alunos={alunos} turmas={turmas} canManage={false} onEdit={openEdit} onDelete={item => { setFeedback(null); setDeleting(item); }} /></CardContent>
-        </Card>
-      )}
+      <Card>
+        <CardHeader><CardTitle>Lançamentos individuais</CardTitle><CardDescription>Histórico detalhado das notas retornadas por GET /notas.</CardDescription></CardHeader>
+        <CardContent>{notasQuery.isLoading ? <LoadingState label="Carregando lançamentos..." /> : notasQuery.isError ? <ErrorMessage message="Não foi possível consultar os lançamentos individuais." onRetry={() => notasQuery.refetch()} /> : filtered.length === 0 ? <EmptyState icon={Calculator} title="Nenhum lançamento encontrado" description="Não há notas individuais para os filtros atuais." /> : <GradeList notas={filtered} matriculas={matriculas} alunos={alunos} turmas={turmas} canManage={false} onEdit={openEdit} onDelete={item => { setFeedback(null); setDeleting(item); }} />}</CardContent>
+      </Card>
 
       <Modal open={formOpen} title={editing ? 'Editar nota' : 'Lançar nota'} description="A nota será vinculada à matrícula selecionada." onClose={closeForm}>
         <form onSubmit={handleSubmit(data => saveMutation.mutate({ matriculaId: Number(data.matriculaId), valor: Number(data.valor), tipo: data.tipo }))} className="space-y-4">
@@ -185,10 +209,26 @@ type GradeSummary = {
   alunoLabel: string;
   alunoMatricula: string;
   disciplinaNome: string;
+  professorNome: string;
   turmaLabel: string;
   media: number;
   quantidade: number;
+  situacao?: SituacaoNota;
 };
+
+function mapNotaResumo(item: NotaResumo): GradeSummary {
+  return {
+    key: `resumo-${item.matriculaId}`,
+    alunoLabel: item.alunoNome,
+    alunoMatricula: item.alunoMatricula,
+    disciplinaNome: item.disciplinaNome,
+    professorNome: item.professorNome,
+    turmaLabel: item.semestre,
+    media: item.media,
+    quantidade: item.quantidadeNotas,
+    situacao: item.situacao,
+  };
+}
 
 function buildGradeSummaries(
   notas: Nota[],
@@ -228,14 +268,14 @@ function buildGradeSummaries(
   return Array.from(groups.values());
 }
 
-function getGradeSituation(media: number) {
-  if (media >= 7) return { label: 'Regular', className: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' };
-  if (media >= 5) return { label: 'Atenção', className: 'border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-300' };
-  return { label: 'Crítico', className: 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300' };
+function getGradeSituation(media: number, situacao?: SituacaoNota) {
+  if (situacao === 'APROVADO' || (!situacao && media >= 7)) return { label: 'Aprovado', className: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300' };
+  if (situacao === 'RECUPERACAO' || (!situacao && media >= 5)) return { label: 'Recuperação', className: 'border-orange-500/20 bg-orange-500/10 text-orange-700 dark:text-orange-300' };
+  return { label: 'Reprovado', className: 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300' };
 }
 
 function GradeSummaryList({ summaries }: { summaries: GradeSummary[] }) {
-  return <><div className="hidden lg:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Matrícula acadêmica</TableHead><TableHead>Disciplina</TableHead><TableHead>Turma / semestre</TableHead><TableHead>Média</TableHead><TableHead>Notas</TableHead><TableHead>Situação</TableHead></TableRow></TableHeader><TableBody>{summaries.map(summary => { const situation = getGradeSituation(summary.media); return <TableRow key={summary.key}><TableCell className="font-semibold text-foreground">{summary.alunoLabel}</TableCell><TableCell>{summary.alunoMatricula}</TableCell><TableCell>{summary.disciplinaNome}</TableCell><TableCell>{summary.turmaLabel}</TableCell><TableCell><span className="text-lg font-bold text-primary">{summary.media.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span></TableCell><TableCell>{summary.quantidade}</TableCell><TableCell><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${situation.className}`}>{situation.label}</span></TableCell></TableRow>; })}</TableBody></Table></div><div className="grid gap-3 lg:hidden">{summaries.map(summary => { const situation = getGradeSituation(summary.media); return <article key={summary.key} className="rounded-xl border border-border bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-4"><div><h3 className="font-semibold text-foreground">{summary.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {summary.alunoMatricula}</p></div><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${situation.className}`}>{situation.label}</span></div><p className="mt-3 text-sm text-foreground">{summary.disciplinaNome}</p><p className="mt-1 text-xs text-muted-foreground">{summary.turmaLabel}</p><div className="mt-4 flex items-end justify-between border-t border-border pt-3"><div><p className="text-xs text-muted-foreground">Média</p><p className="text-2xl font-bold text-primary">{summary.media.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</p></div><p className="text-xs text-muted-foreground">{summary.quantidade} {summary.quantidade === 1 ? 'nota' : 'notas'}</p></div></article>; })}</div></>;
+  return <><div className="hidden xl:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Matrícula acadêmica</TableHead><TableHead>Disciplina</TableHead><TableHead>Professor</TableHead><TableHead>Semestre</TableHead><TableHead>Média</TableHead><TableHead>Notas</TableHead><TableHead>Situação</TableHead></TableRow></TableHeader><TableBody>{summaries.map(summary => { const situation = getGradeSituation(summary.media, summary.situacao); return <TableRow key={summary.key}><TableCell className="font-semibold text-foreground">{summary.alunoLabel}</TableCell><TableCell>{summary.alunoMatricula}</TableCell><TableCell>{summary.disciplinaNome}</TableCell><TableCell>{summary.professorNome}</TableCell><TableCell>{summary.turmaLabel}</TableCell><TableCell><span className="text-lg font-bold text-primary">{summary.media.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span></TableCell><TableCell>{summary.quantidade}</TableCell><TableCell><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${situation.className}`}>{situation.label}</span></TableCell></TableRow>; })}</TableBody></Table></div><div className="grid gap-3 xl:hidden">{summaries.map(summary => { const situation = getGradeSituation(summary.media, summary.situacao); return <article key={summary.key} className="rounded-xl border border-border bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-4"><div><h3 className="font-semibold text-foreground">{summary.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {summary.alunoMatricula}</p></div><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${situation.className}`}>{situation.label}</span></div><p className="mt-3 text-sm text-foreground">{summary.disciplinaNome}</p><p className="mt-1 text-xs text-muted-foreground">Prof. {summary.professorNome} • {summary.turmaLabel}</p><div className="mt-4 flex items-end justify-between border-t border-border pt-3"><div><p className="text-xs text-muted-foreground">Média</p><p className="text-2xl font-bold text-primary">{summary.media.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</p></div><p className="text-xs text-muted-foreground">{summary.quantidade} {summary.quantidade === 1 ? 'nota' : 'notas'}</p></div></article>; })}</div></>;
 }
 
 function GradeList({ notas, matriculas, alunos, turmas, canManage, onEdit, onDelete }: { notas: Nota[]; matriculas: Matricula[]; alunos: Awaited<ReturnType<typeof listarAlunos>>; turmas: Awaited<ReturnType<typeof listarTurmas>>; canManage: boolean; onEdit: (item: Nota) => void; onDelete: (item: Nota) => void }) {
@@ -248,6 +288,7 @@ function getNotaContext(nota: Nota, matricula: Matricula | undefined, alunos: Aw
     alunoLabel: nota.alunoNome || base?.alunoLabel || 'Aluno não identificado',
     alunoMatricula: nota.alunoMatricula || base?.alunoMatricula || 'Não informada',
     disciplinaNome: nota.disciplinaNome || base?.disciplinaNome || 'Disciplina não informada',
+    professorNome: nota.professorNome || base?.professorNome || 'Professor não informado',
     turmaLabel: nota.turmaLabel || nota.semestre || base?.turmaLabel || `Matrícula #${getNotaMatriculaId(nota) ?? '—'}`,
   };
 }

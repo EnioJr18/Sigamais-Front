@@ -1,5 +1,9 @@
 import {
+  BellRing,
   BookOpen,
+  BookOpenCheck,
+  CalendarCheck,
+  CircleUserRound,
   ClipboardList,
   GraduationCap,
   LayoutDashboard,
@@ -11,9 +15,15 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { NavLink } from 'react-router-dom';
 
-import { getCurrentUser, type UserRole } from '../../lib/rbac';
+import {
+  getCurrentUser,
+  normalizeUserRole,
+  type UserRole,
+} from '../../lib/rbac';
+import { getMeuPerfil } from '../../services/profileService';
 import { Button } from '../ui/button';
 
 const items: Array<{
@@ -23,24 +33,45 @@ const items: Array<{
   roles?: UserRole[];
 }> = [
   { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
-  { label: 'Alunos', to: '/alunos', icon: Users },
-  { label: 'Professores', to: '/professores', icon: UserRound },
-  { label: 'Turmas', to: '/turmas', icon: GraduationCap },
-  { label: 'Disciplinas', to: '/disciplinas', icon: BookOpen },
-  { label: 'Matrículas', to: '/matriculas', icon: ClipboardList },
+  { label: 'Alunos', to: '/alunos', icon: Users, roles: ['ADMIN'] },
+  { label: 'Professores', to: '/professores', icon: UserRound, roles: ['ADMIN'] },
+  { label: 'Turmas', to: '/turmas', icon: GraduationCap, roles: ['ADMIN'] },
+  { label: 'Disciplinas', to: '/disciplinas', icon: BookOpen, roles: ['ADMIN'] },
+  { label: 'Matrículas', to: '/matriculas', icon: ClipboardList, roles: ['ADMIN'] },
   {
     label: 'Notas',
     to: '/notas',
     icon: SquarePen,
-    roles: ['ADMIN', 'PROFESSOR', 'ALUNO'],
+    roles: ['ADMIN', 'PROFESSOR'],
   },
   {
     label: 'Frequência',
     to: '/frequencia',
     icon: ScrollText,
-    roles: ['ADMIN', 'PROFESSOR', 'ALUNO'],
+    roles: ['ADMIN', 'PROFESSOR'],
   },
-  { label: 'Alerta de Risco', to: '/risco', icon: Siren },
+  { label: 'Alerta de Risco', to: '/risco', icon: Siren, roles: ['ADMIN', 'PROFESSOR'] },
+  { label: 'Alertas', to: '/alertas', icon: BellRing, roles: ['ADMIN'] },
+  {
+    label: 'Minhas turmas',
+    to: '/minhas-turmas',
+    icon: GraduationCap,
+    roles: ['ALUNO'],
+  },
+  {
+    label: 'Minhas notas',
+    to: '/minhas-notas',
+    icon: BookOpenCheck,
+    roles: ['ALUNO'],
+  },
+  {
+    label: 'Minha frequência',
+    to: '/minha-frequencia',
+    icon: CalendarCheck,
+    roles: ['ALUNO'],
+  },
+  { label: 'Meu risco', to: '/meu-risco', icon: Siren, roles: ['ALUNO'] },
+  { label: 'Meu perfil', to: '/perfil', icon: CircleUserRound },
 ];
 
 interface SidebarProps {
@@ -49,9 +80,15 @@ interface SidebarProps {
 }
 
 export function Sidebar({ open, onClose }: SidebarProps) {
-  const { role } = getCurrentUser();
+  const tokenUser = getCurrentUser();
+  const profileQuery = useQuery({
+    queryKey: ['meu-perfil'],
+    queryFn: getMeuPerfil,
+    enabled: tokenUser.role === undefined,
+  });
+  const role = tokenUser.role ?? normalizeUserRole(profileQuery.data?.perfil);
   const visibleItems = items.filter(
-    item => !item.roles || !role || item.roles.includes(role),
+    item => !item.roles || (role !== undefined && item.roles.includes(role)),
   );
 
   return (

@@ -24,6 +24,20 @@ export interface NotaPayload {
   tipo: string;
 }
 
+export type SituacaoNota = 'APROVADO' | 'RECUPERACAO' | 'REPROVADO';
+
+export interface NotaResumo {
+  matriculaId: number;
+  alunoNome: string;
+  alunoMatricula: string;
+  disciplinaNome: string;
+  professorNome: string;
+  semestre: string;
+  media: number;
+  quantidadeNotas: number;
+  situacao: SituacaoNota;
+}
+
 function normalizeNota(nota: Nota): Nota {
   return {
     ...nota,
@@ -42,6 +56,26 @@ function normalizeNota(nota: Nota): Nota {
 export async function listarNotas() {
   const response = await api.get('/notas');
   return extractList<Nota>(response.data).map(normalizeNota);
+}
+
+export async function buscarResumoNotas() {
+  const response = await api.get('/notas/resumo');
+  return extractList<NotaResumo>(response.data).map(item => ({
+    ...item,
+    matriculaId: Number(item.matriculaId),
+    media: Number(item.media),
+    quantidadeNotas: Number(item.quantidadeNotas),
+  }));
+}
+
+export async function buscarResumoNotasProfessor() {
+  const response = await api.get('/usuarios/me/professor/notas');
+  return extractList<NotaResumo>(response.data).map(item => ({
+    ...item,
+    matriculaId: Number(item.matriculaId),
+    media: Number(item.media),
+    quantidadeNotas: Number(item.quantidadeNotas),
+  }));
 }
 
 export async function criarNota(payload: NotaPayload) {

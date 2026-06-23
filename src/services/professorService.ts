@@ -4,7 +4,7 @@ import { extractList } from './http';
 export interface Professor {
   id: number;
   nome: string;
-  cpf: string;
+  cpf?: string;
   email: string;
   titulacao: string;
 }

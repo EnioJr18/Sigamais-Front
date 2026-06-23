@@ -19,10 +19,12 @@ import { Modal } from '@/components/ui/modal';
 import { Select } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { buildEnrollmentLabel, getMatriculaContext } from '@/lib/academic';
-import { canManageAcademicRecords } from '@/lib/rbac';
+import { normalizeUserRole } from '@/lib/rbac';
 import { listarAlunos } from '@/services/alunoService';
 import {
   atualizarFrequencia,
+  buscarResumoFrequencias,
+  buscarResumoFrequenciasProfessor,
   criarFrequencia,
   excluirFrequencia,
   getFaltas,
@@ -30,9 +32,11 @@ import {
   listarFrequencias,
   type Frequencia,
   type FrequenciaPayload,
+  type FrequenciaResumo,
 } from '@/services/frequenciaService';
 import { getApiErrorMessage } from '@/services/http';
 import { listarMatriculas, type Matricula } from '@/services/matriculaService';
+import { getMeuPerfil } from '@/services/profileService';
 import { listarTurmas } from '@/services/turmaService';
 
 const frequenciaSchema = z.object({
@@ -44,14 +48,23 @@ type FrequenciaFormData = z.infer<typeof frequenciaSchema>;
 
 function Attendance() {
   const queryClient = useQueryClient();
-  const canManage = canManageAcademicRecords();
   const [search, setSearch] = useState('');
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Frequencia | null>(null);
   const [deleting, setDeleting] = useState<Frequencia | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
-  const frequenciasQuery = useQuery({ queryKey: ['frequencias'], queryFn: listarFrequencias });
+  const profileQuery = useQuery({ queryKey: ['meu-perfil'], queryFn: getMeuPerfil });
+  const role = normalizeUserRole(profileQuery.data?.perfil);
+  const isAdmin = role === 'ADMIN';
+  const isProfessor = role === 'PROFESSOR';
+  const canManage = isAdmin || isProfessor;
+  const frequenciasQuery = useQuery({ queryKey: ['frequencias'], queryFn: listarFrequencias, enabled: isAdmin });
+  const resumoQuery = useQuery({
+    queryKey: ['frequencias-resumo', role],
+    queryFn: isProfessor ? buscarResumoFrequenciasProfessor : buscarResumoFrequencias,
+    enabled: isAdmin || isProfessor,
+  });
   const matriculasQuery = useQuery({ queryKey: ['matriculas'], queryFn: listarMatriculas });
   const alunosQuery = useQuery({ queryKey: ['alunos'], queryFn: listarAlunos });
   const turmasQuery = useQuery({ queryKey: ['turmas'], queryFn: listarTurmas });
@@ -64,7 +77,12 @@ function Attendance() {
     defaultValues: { matriculaId: 0, faltas: 0 },
   });
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ['frequencias'] });
+  const refresh = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['frequencias'] }),
+      queryClient.invalidateQueries({ queryKey: ['frequencias-resumo'] }),
+    ]);
+  };
   const saveMutation = useMutation({
     mutationFn: (payload: FrequenciaPayload) => editing ? atualizarFrequencia(editing.id, payload) : criarFrequencia(payload),
     onSuccess: async () => {
@@ -99,10 +117,17 @@ function Attendance() {
       return [frequencia.id, getFrequenciaMatriculaId(frequencia), context.alunoLabel, context.alunoMatricula, context.disciplinaNome, context.turmaLabel, getFaltas(frequencia)].filter(value => value !== undefined).join(' ').toLocaleLowerCase('pt-BR').includes(term);
     });
   }, [alunos, frequenciasQuery.data, matriculas, search, turmas]);
-  const summaries = useMemo(
-    () => buildAttendanceSummaries(filtered, matriculas, alunos, turmas),
-    [alunos, filtered, matriculas, turmas],
+  const fallbackSummaries = useMemo(
+    () => isAdmin ? buildAttendanceSummaries(filtered, matriculas, alunos, turmas) : [],
+    [alunos, filtered, isAdmin, matriculas, turmas],
   );
+  const summaries = useMemo(() => {
+    if (!resumoQuery.isSuccess) return fallbackSummaries;
+    const term = search.trim().toLocaleLowerCase('pt-BR');
+    return resumoQuery.data
+      .map(mapFrequenciaResumo)
+      .filter(item => !term || [item.alunoLabel, item.alunoMatricula, item.disciplinaNome, item.professorNome, item.turmaLabel].join(' ').toLocaleLowerCase('pt-BR').includes(term));
+  }, [fallbackSummaries, resumoQuery.data, resumoQuery.isSuccess, search]);
 
   function openCreate() {
     setEditing(null);
@@ -126,11 +151,9 @@ function Attendance() {
     <motion.section initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="mx-auto w-full max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-sm font-medium text-accent">Diário acadêmico</p><h1 className="mt-1 text-2xl font-semibold tracking-tight text-primary sm:text-3xl">Frequência</h1><p className="mt-2 text-sm text-muted-foreground">Registre presenças e faltas por matrícula.</p></div>{canManage && <Button onClick={openCreate} disabled={matriculas.length === 0}><Plus className="h-4 w-4" />Lançar frequência</Button>}</div>
       {feedback && !formOpen && !deleting && <FeedbackBanner feedback={feedback} />}
-      <Card><CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0"><div><CardTitle>Resumo de frequência</CardTitle><CardDescription className="mt-2">Faltas consolidadas por matrícula e disciplina.</CardDescription></div><div className="relative w-full sm:max-w-sm"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar aluno, turma ou matrícula" className="pl-9" /></div></CardHeader><CardContent>{frequenciasQuery.isLoading ? <LoadingState label="Carregando frequências..." /> : frequenciasQuery.isError ? <ErrorMessage message="Não foi possível consultar as frequências." onRetry={() => frequenciasQuery.refetch()} /> : filtered.length === 0 ? <EmptyState icon={ScrollText} title={search ? 'Nenhuma frequência encontrada' : 'Nenhuma frequência registrada'} description={search ? 'Tente buscar por outro termo.' : 'Registre as primeiras faltas.'} action={canManage && !search && matriculas.length > 0 ? <Button size="sm" onClick={openCreate}>Lançar frequência</Button> : undefined} /> : <AttendanceSummaryList summaries={summaries} />}</CardContent></Card>
+      <Card><CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0"><div><CardTitle>Resumo de frequência</CardTitle><CardDescription className="mt-2">{resumoQuery.isSuccess ? 'Dados consolidados pela API.' : 'Resumo local temporário baseado nos lançamentos individuais.'}</CardDescription></div><div className="relative w-full sm:max-w-sm"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar aluno, turma ou matrícula" className="pl-9" /></div></CardHeader><CardContent>{resumoQuery.isLoading && frequenciasQuery.isLoading ? <LoadingState label="Carregando resumo de frequências..." /> : resumoQuery.isError && frequenciasQuery.isError ? <ErrorMessage message="Não foi possível consultar o resumo nem os lançamentos de frequência." onRetry={() => { resumoQuery.refetch(); frequenciasQuery.refetch(); }} /> : summaries.length === 0 ? <EmptyState icon={ScrollText} title={search ? 'Nenhum resumo encontrado' : 'Nenhuma frequência registrada'} description={search ? 'Tente buscar por outro termo.' : 'Registre as primeiras faltas.'} action={canManage && !search && matriculas.length > 0 ? <Button size="sm" onClick={openCreate}>Lançar frequência</Button> : undefined} /> : <AttendanceSummaryList summaries={summaries} />}</CardContent></Card>
 
-      {filtered.length > 0 && (
-        <Card><CardHeader><CardTitle>Lançamentos individuais</CardTitle><CardDescription>Histórico detalhado dos {filtered.length} registros encontrados.</CardDescription></CardHeader><CardContent><AttendanceList frequencias={filtered} matriculas={matriculas} alunos={alunos} turmas={turmas} canManage={false} onEdit={openEdit} onDelete={item => { setFeedback(null); setDeleting(item); }} /></CardContent></Card>
-      )}
+      <Card><CardHeader><CardTitle>Lançamentos individuais</CardTitle><CardDescription>Histórico detalhado retornado por GET /frequencias.</CardDescription></CardHeader><CardContent>{frequenciasQuery.isLoading ? <LoadingState label="Carregando lançamentos..." /> : frequenciasQuery.isError ? <ErrorMessage message="Não foi possível consultar os lançamentos individuais." onRetry={() => frequenciasQuery.refetch()} /> : filtered.length === 0 ? <EmptyState icon={ScrollText} title="Nenhum lançamento encontrado" description="Não há registros individuais para os filtros atuais." /> : <AttendanceList frequencias={filtered} matriculas={matriculas} alunos={alunos} turmas={turmas} canManage={false} onEdit={openEdit} onDelete={item => { setFeedback(null); setDeleting(item); }} />}</CardContent></Card>
 
       <Modal open={formOpen} title={editing ? 'Editar frequência' : 'Lançar frequência'} description="As faltas serão vinculadas à matrícula selecionada." onClose={closeForm}><form onSubmit={handleSubmit(data => saveMutation.mutate({ matriculaId: Number(data.matriculaId), faltas: Number(data.faltas) }))} className="space-y-4">{feedback?.type === 'error' && <InlineError message={feedback.message} />}<FormField label="Matrícula" error={errors.matriculaId?.message}><Select {...register('matriculaId')}><option value="">Selecione</option>{matriculas.map(item => <option key={item.id} value={item.id}>{buildEnrollmentLabel(item, alunos, turmas)}</option>)}</Select></FormField><FormField label="Faltas" error={errors.faltas?.message}><Input type="number" min="0" {...register('faltas')} /></FormField><div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end"><Button variant="ghost" onClick={closeForm}>Cancelar</Button><Button type="submit" disabled={saveMutation.isPending}>{saveMutation.isPending ? 'Salvando...' : editing ? 'Salvar alterações' : 'Lançar frequência'}</Button></div></form></Modal>
       <DeleteConfirmation open={Boolean(deleting)} entityLabel="frequência" itemLabel={deleting ? `#${deleting.id}` : ''} pending={deleteMutation.isPending} error={feedback?.type === 'error' ? feedback.message : undefined} onClose={() => setDeleting(null)} onConfirm={() => deleting && deleteMutation.mutate(deleting.id)} />
@@ -143,10 +166,24 @@ type AttendanceSummary = {
   alunoLabel: string;
   alunoMatricula: string;
   disciplinaNome: string;
+  professorNome: string;
   turmaLabel: string;
   totalFaltas: number;
   quantidade: number;
 };
+
+function mapFrequenciaResumo(item: FrequenciaResumo): AttendanceSummary {
+  return {
+    key: `resumo-${item.matriculaId}`,
+    alunoLabel: item.alunoNome,
+    alunoMatricula: item.alunoMatricula,
+    disciplinaNome: item.disciplinaNome,
+    professorNome: item.professorNome,
+    turmaLabel: item.semestre,
+    totalFaltas: item.totalFaltas,
+    quantidade: item.quantidadeRegistros,
+  };
+}
 
 function buildAttendanceSummaries(
   frequencias: Frequencia[],
@@ -185,7 +222,7 @@ function buildAttendanceSummaries(
 }
 
 function AttendanceSummaryList({ summaries }: { summaries: AttendanceSummary[] }) {
-  return <><div className="hidden lg:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Matrícula acadêmica</TableHead><TableHead>Disciplina</TableHead><TableHead>Turma / semestre</TableHead><TableHead>Total de faltas</TableHead><TableHead>Registros</TableHead></TableRow></TableHeader><TableBody>{summaries.map(summary => <TableRow key={summary.key}><TableCell className="font-semibold text-foreground">{summary.alunoLabel}</TableCell><TableCell>{summary.alunoMatricula}</TableCell><TableCell>{summary.disciplinaNome}</TableCell><TableCell>{summary.turmaLabel}</TableCell><TableCell><span className="text-lg font-bold text-destructive">{summary.totalFaltas}</span></TableCell><TableCell>{summary.quantidade} {summary.quantidade === 1 ? 'lançamento' : 'lançamentos'}</TableCell></TableRow>)}</TableBody></Table></div><div className="grid gap-3 lg:hidden">{summaries.map(summary => <article key={summary.key} className="rounded-xl border border-border bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-4"><div><h3 className="font-semibold text-foreground">{summary.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {summary.alunoMatricula}</p></div><div className="text-right"><p className="text-2xl font-bold text-destructive">{summary.totalFaltas}</p><p className="text-xs text-muted-foreground">faltas</p></div></div><p className="mt-3 text-sm text-foreground">{summary.disciplinaNome}</p><p className="mt-1 text-xs text-muted-foreground">{summary.turmaLabel}</p><p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">{summary.quantidade} {summary.quantidade === 1 ? 'lançamento registrado' : 'lançamentos registrados'}</p></article>)}</div></>;
+  return <><div className="hidden xl:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Matrícula acadêmica</TableHead><TableHead>Disciplina</TableHead><TableHead>Professor</TableHead><TableHead>Semestre</TableHead><TableHead>Total de faltas</TableHead><TableHead>Registros</TableHead></TableRow></TableHeader><TableBody>{summaries.map(summary => <TableRow key={summary.key}><TableCell className="font-semibold text-foreground">{summary.alunoLabel}</TableCell><TableCell>{summary.alunoMatricula}</TableCell><TableCell>{summary.disciplinaNome}</TableCell><TableCell>{summary.professorNome}</TableCell><TableCell>{summary.turmaLabel}</TableCell><TableCell><span className="text-lg font-bold text-destructive">{summary.totalFaltas}</span></TableCell><TableCell>{summary.quantidade} {summary.quantidade === 1 ? 'lançamento' : 'lançamentos'}</TableCell></TableRow>)}</TableBody></Table></div><div className="grid gap-3 xl:hidden">{summaries.map(summary => <article key={summary.key} className="rounded-xl border border-border bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-4"><div><h3 className="font-semibold text-foreground">{summary.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {summary.alunoMatricula}</p></div><div className="text-right"><p className="text-2xl font-bold text-destructive">{summary.totalFaltas}</p><p className="text-xs text-muted-foreground">faltas</p></div></div><p className="mt-3 text-sm text-foreground">{summary.disciplinaNome}</p><p className="mt-1 text-xs text-muted-foreground">Prof. {summary.professorNome} • {summary.turmaLabel}</p><p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">{summary.quantidade} {summary.quantidade === 1 ? 'lançamento registrado' : 'lançamentos registrados'}</p></article>)}</div></>;
 }
 
 function AttendanceList({ frequencias, matriculas, alunos, turmas, canManage, onEdit, onDelete }: { frequencias: Frequencia[]; matriculas: Matricula[]; alunos: Awaited<ReturnType<typeof listarAlunos>>; turmas: Awaited<ReturnType<typeof listarTurmas>>; canManage: boolean; onEdit: (item: Frequencia) => void; onDelete: (item: Frequencia) => void }) {
@@ -198,6 +235,7 @@ function getFrequenciaContext(item: Frequencia, matricula: Matricula | undefined
     alunoLabel: item.alunoNome || base?.alunoLabel || 'Aluno não identificado',
     alunoMatricula: item.alunoMatricula || base?.alunoMatricula || 'Não informada',
     disciplinaNome: item.disciplinaNome || base?.disciplinaNome || 'Disciplina não informada',
+    professorNome: item.professorNome || base?.professorNome || 'Professor não informado',
     turmaLabel: item.turmaLabel || item.semestre || base?.turmaLabel || `Matrícula #${getFrequenciaMatriculaId(item) ?? '—'}`,
   };
 }

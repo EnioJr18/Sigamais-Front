@@ -211,7 +211,6 @@ function Professors() {
     return (professoresQuery.data ?? []).filter(professor =>
       [
         getProfessorName(professor),
-        professor.cpf,
         professor.email,
         getProfessorSpecialty(professor),
       ]
@@ -235,7 +234,7 @@ function Professors() {
     reset({
       editing: true,
       nome: professor.nome,
-      cpf: professor.cpf,
+      cpf: professor.cpf ?? '',
       email: professor.email,
       senha: '',
       titulacao: getProfessorSpecialty(professor),
@@ -428,7 +427,6 @@ function ProfessorList({
             <TableRow>
               <TableHead>ID</TableHead>
               <TableHead>Nome</TableHead>
-              <TableHead>CPF</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Titulação</TableHead>
               {canManage && <TableHead className="text-right">Ações</TableHead>}
@@ -441,7 +439,6 @@ function ProfessorList({
                   #{professor.id}
                 </TableCell>
                 <TableCell>{professor.nome}</TableCell>
-                <TableCell>{professor.cpf || '—'}</TableCell>
                 <TableCell>{professor.email || '—'}</TableCell>
                 <TableCell>{getProfessorSpecialty(professor) || '—'}</TableCell>
                 {canManage && (
@@ -468,9 +465,6 @@ function ProfessorList({
             <h3 className="font-medium text-foreground">
               {getProfessorName(professor)}
             </h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {professor.cpf || 'CPF não informado'}
-            </p>
             <p className="mt-1 text-sm text-muted-foreground">
               {professor.email || 'Email não informado'}
             </p>

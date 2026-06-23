@@ -19,6 +19,13 @@ import Grades from './pages/grades/Grades.tsx';
 import Attendance from './pages/attendance/Attendance.tsx';
 import Enrollments from './pages/enrollments/Enrollments.tsx';
 import RiskAlerts from './pages/risk/RiskAlerts.tsx';
+import Profile from './pages/profile/Profile.tsx';
+import AccessDenied from './pages/access-denied/AccessDenied.tsx';
+import MyClasses from './pages/student/MyClasses.tsx';
+import MyGrades from './pages/student/MyGrades.tsx';
+import MyAttendance from './pages/student/MyAttendance.tsx';
+import MyRisk from './pages/student/MyRisk.tsx';
+import RiskInterventions from './pages/alerts/RiskInterventions.tsx';
 
 const router = createBrowserRouter([
   {
@@ -41,36 +48,79 @@ const router = createBrowserRouter([
             element: <Dashboard />,
           },
           {
-            path: 'alunos',
-            element: <Students />,
+            path: 'perfil',
+            element: <Profile />,
           },
           {
-            path: 'professores',
-            element: <Professors />,
+            path: 'acesso-negado',
+            element: <AccessDenied />,
           },
           {
-            path: 'turmas',
-            element: <Classes />,
+            element: <ProtectedRoute allowedRoles={['ADMIN']} />,
+            children: [
+              {
+                path: 'alunos',
+                element: <Students />,
+              },
+              {
+                path: 'professores',
+                element: <Professors />,
+              },
+              {
+                path: 'turmas',
+                element: <Classes />,
+              },
+              {
+                path: 'disciplinas',
+                element: <Disciplines />,
+              },
+              {
+                path: 'matriculas',
+                element: <Enrollments />,
+              },
+              {
+                path: 'alertas',
+                element: <RiskInterventions />,
+              },
+            ],
           },
           {
-            path: 'disciplinas',
-            element: <Disciplines />,
+            element: <ProtectedRoute allowedRoles={['ADMIN', 'PROFESSOR']} />,
+            children: [
+              {
+                path: 'notas',
+                element: <Grades />,
+              },
+              {
+                path: 'frequencia',
+                element: <Attendance />,
+              },
+              {
+                path: 'risco',
+                element: <RiskAlerts />,
+              },
+            ],
           },
           {
-            path: 'matriculas',
-            element: <Enrollments />,
-          },
-          {
-            path: 'notas',
-            element: <Grades />,
-          },
-          {
-            path: 'frequencia',
-            element: <Attendance />,
-          },
-          {
-            path: 'risco',
-            element: <RiskAlerts />,
+            element: <ProtectedRoute allowedRoles={['ADMIN', 'ALUNO']} />,
+            children: [
+              {
+                path: 'minhas-turmas',
+                element: <MyClasses />,
+              },
+              {
+                path: 'minhas-notas',
+                element: <MyGrades />,
+              },
+              {
+                path: 'minha-frequencia',
+                element: <MyAttendance />,
+              },
+              {
+                path: 'meu-risco',
+                element: <MyRisk />,
+              },
+            ],
           },
         ],
       },

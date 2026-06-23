@@ -5,14 +5,14 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
-  --color-siga-blue-50: #eff7ff;
+  --color-siga-blue-50: #eaf3ff;
   --color-siga-blue-100: #dceeff;
   --color-siga-blue-200: #b9ddff;
   --color-siga-blue-500: #2474c8;
   --color-siga-blue-600: #1557a6;
   --color-siga-blue-700: #104a8e;
   --color-siga-blue-900: #12335d;
-  --color-siga-orange-50: #fff7ed;
+  --color-siga-orange-50: #fff3e8;
   --color-siga-orange-100: #ffedd5;
   --color-siga-orange-400: #fb923c;
   --color-siga-orange-500: #f47c20;
@@ -68,7 +68,7 @@
   --primary-foreground: #ffffff;
   --secondary: #fff3e8;
   --secondary-foreground: #9a3f00;
-  --muted: #f1f5f9;
+  --muted: #f8fafc;
   --muted-foreground: #64748b;
   --accent: #f47c20;
   --accent-hover: #d96512;
@@ -80,7 +80,7 @@
   --warning: #f47c20;
   --warning-foreground: #7c2d12;
   --border: #e2e8f0;
-  --input: #cbd5e1;
+  --input: #e2e8f0;
   --ring: #1557a6;
 }
 
@@ -147,6 +147,7 @@
 
   #root {
     min-height: 100vh;
+    background-color: var(--background);
   }
 
   a {

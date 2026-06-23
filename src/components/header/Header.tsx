@@ -1,9 +1,10 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { LogOut, Menu, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import { getCurrentUser } from '../../lib/rbac';
 import { clearToken } from '../../services/auth';
+import { getMeuPerfil } from '../../services/profileService';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { Button } from '../ui/button';
 
@@ -15,6 +16,8 @@ function Header({ onMenuClick }: HeaderProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const user = getCurrentUser();
+  const profileQuery = useQuery({ queryKey: ['meu-perfil'], queryFn: getMeuPerfil });
+  const profile = profileQuery.data;
 
   const handleLogout = () => {
     clearToken();
@@ -23,7 +26,7 @@ function Header({ onMenuClick }: HeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-header/95 shadow-[0_6px_24px_-22px_rgba(15,23,42,0.45)] backdrop-blur-xl dark:shadow-none">
+    <header className="sticky top-0 z-30 border-b border-border bg-header shadow-[0_6px_24px_-22px_rgba(15,23,42,0.45)] dark:shadow-none">
       <div className="flex h-[4.25rem] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
           <Button
@@ -46,16 +49,24 @@ function Header({ onMenuClick }: HeaderProps) {
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="hidden border-r border-border pr-3 text-right sm:block">
             <p className="max-w-48 truncate text-sm font-medium text-foreground">
-              {user.name}
+              {profile?.nome ?? user.name}
             </p>
             <p className="text-xs text-muted-foreground">
-              {user.role ?? 'Perfil não informado'}
+              {profile?.perfil ?? user.role ?? 'Perfil não informado'}
             </p>
           </div>
           <ThemeToggle />
-          <span className="grid h-9 w-9 place-items-center rounded-full bg-siga-blue-50 text-primary ring-1 ring-inset ring-primary/15 dark:bg-primary/10">
-            <UserRound className="h-4 w-4" />
-          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate('/perfil')}
+            className="overflow-hidden rounded-full bg-siga-blue-50 p-0 text-primary ring-1 ring-inset ring-primary/15 hover:bg-primary/10 dark:bg-primary/10"
+            aria-label="Abrir meu perfil"
+          >
+            {profile?.fotoPerfilUrl
+              ? <img src={profile.fotoPerfilUrl} alt="" className="h-full w-full object-cover" />
+              : <UserRound className="h-4 w-4" />}
+          </Button>
           <Button
             variant="ghost"
             size="icon"
