@@ -23,9 +23,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/Pagination';
 import { Select } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { buildEnrollmentLabel, getMatriculaContext } from '@/lib/academic';
+import { usePagination } from '@/hooks/usePagination';
 import { normalizeUserRole } from '@/lib/rbac';
 import { listarAlunos } from '@/services/alunoService';
 import { getApiErrorMessage } from '@/services/http';
@@ -275,6 +277,26 @@ function getGradeSituation(media: number, situacao?: SituacaoNota) {
 }
 
 function GradeSummaryList({ summaries }: { summaries: GradeSummary[] }) {
+  const pagination = usePagination(summaries, {
+    resetKey: summaries,
+  });
+
+  return (
+    <>
+      <GradeSummaryContent summaries={pagination.pageItems} />
+      <Pagination
+        page={pagination.page}
+        pageSize={pagination.pageSize}
+        totalItems={pagination.totalItems}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+        itemLabel="resumos"
+      />
+    </>
+  );
+}
+
+function GradeSummaryContent({ summaries }: { summaries: GradeSummary[] }) {
   return <><div className="hidden xl:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Matrícula acadêmica</TableHead><TableHead>Disciplina</TableHead><TableHead>Professor</TableHead><TableHead>Semestre</TableHead><TableHead>Média</TableHead><TableHead>Notas</TableHead><TableHead>Situação</TableHead></TableRow></TableHeader><TableBody>{summaries.map(summary => { const situation = getGradeSituation(summary.media, summary.situacao); return <TableRow key={summary.key}><TableCell className="font-semibold text-foreground">{summary.alunoLabel}</TableCell><TableCell>{summary.alunoMatricula}</TableCell><TableCell>{summary.disciplinaNome}</TableCell><TableCell>{summary.professorNome}</TableCell><TableCell>{summary.turmaLabel}</TableCell><TableCell><span className="text-lg font-bold text-primary">{summary.media.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span></TableCell><TableCell>{summary.quantidade}</TableCell><TableCell><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${situation.className}`}>{situation.label}</span></TableCell></TableRow>; })}</TableBody></Table></div><div className="grid gap-3 xl:hidden">{summaries.map(summary => { const situation = getGradeSituation(summary.media, summary.situacao); return <article key={summary.key} className="rounded-xl border border-border bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-4"><div><h3 className="font-semibold text-foreground">{summary.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {summary.alunoMatricula}</p></div><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${situation.className}`}>{situation.label}</span></div><p className="mt-3 text-sm text-foreground">{summary.disciplinaNome}</p><p className="mt-1 text-xs text-muted-foreground">Prof. {summary.professorNome} • {summary.turmaLabel}</p><div className="mt-4 flex items-end justify-between border-t border-border pt-3"><div><p className="text-xs text-muted-foreground">Média</p><p className="text-2xl font-bold text-primary">{summary.media.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</p></div><p className="text-xs text-muted-foreground">{summary.quantidade} {summary.quantidade === 1 ? 'nota' : 'notas'}</p></div></article>; })}</div></>;
 }
 

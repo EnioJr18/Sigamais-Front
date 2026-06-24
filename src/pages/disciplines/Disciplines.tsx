@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/Pagination';
 import {
   Table,
   TableBody,
@@ -37,6 +38,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { canManageStructure } from '@/lib/rbac';
+import { usePagination } from '@/hooks/usePagination';
 import {
   atualizarDisciplina,
   criarDisciplina,
@@ -148,6 +150,7 @@ function Disciplines() {
         .includes(term),
     );
   }, [disciplinasQuery.data, search]);
+  const pagination = usePagination(filtered, { resetKey: search });
 
   function openCreate() {
     setEditing(null);
@@ -249,15 +252,25 @@ function Disciplines() {
               }
             />
           ) : (
-            <DisciplineList
-              disciplinas={filtered}
-              canManage={false}
-              onEdit={openEdit}
-              onDelete={item => {
-                setFeedback(null);
-                setDeleting(item);
-              }}
-            />
+            <>
+              <DisciplineList
+                disciplinas={pagination.pageItems}
+                canManage={false}
+                onEdit={openEdit}
+                onDelete={item => {
+                  setFeedback(null);
+                  setDeleting(item);
+                }}
+              />
+              <Pagination
+                page={pagination.page}
+                pageSize={pagination.pageSize}
+                totalItems={pagination.totalItems}
+                onPageChange={pagination.setPage}
+                onPageSizeChange={pagination.setPageSize}
+                itemLabel="disciplinas"
+              />
+            </>
           )}
         </CardContent>
       </Card>

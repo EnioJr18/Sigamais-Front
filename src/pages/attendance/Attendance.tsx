@@ -16,9 +16,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/Pagination';
 import { Select } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { buildEnrollmentLabel, getMatriculaContext } from '@/lib/academic';
+import { usePagination } from '@/hooks/usePagination';
 import { normalizeUserRole } from '@/lib/rbac';
 import { listarAlunos } from '@/services/alunoService';
 import {
@@ -222,6 +224,26 @@ function buildAttendanceSummaries(
 }
 
 function AttendanceSummaryList({ summaries }: { summaries: AttendanceSummary[] }) {
+  const pagination = usePagination(summaries, {
+    resetKey: summaries,
+  });
+
+  return (
+    <>
+      <AttendanceSummaryContent summaries={pagination.pageItems} />
+      <Pagination
+        page={pagination.page}
+        pageSize={pagination.pageSize}
+        totalItems={pagination.totalItems}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+        itemLabel="resumos"
+      />
+    </>
+  );
+}
+
+function AttendanceSummaryContent({ summaries }: { summaries: AttendanceSummary[] }) {
   return <><div className="hidden xl:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Matrícula acadêmica</TableHead><TableHead>Disciplina</TableHead><TableHead>Professor</TableHead><TableHead>Semestre</TableHead><TableHead>Total de faltas</TableHead><TableHead>Registros</TableHead></TableRow></TableHeader><TableBody>{summaries.map(summary => <TableRow key={summary.key}><TableCell className="font-semibold text-foreground">{summary.alunoLabel}</TableCell><TableCell>{summary.alunoMatricula}</TableCell><TableCell>{summary.disciplinaNome}</TableCell><TableCell>{summary.professorNome}</TableCell><TableCell>{summary.turmaLabel}</TableCell><TableCell><span className="text-lg font-bold text-destructive">{summary.totalFaltas}</span></TableCell><TableCell>{summary.quantidade} {summary.quantidade === 1 ? 'lançamento' : 'lançamentos'}</TableCell></TableRow>)}</TableBody></Table></div><div className="grid gap-3 xl:hidden">{summaries.map(summary => <article key={summary.key} className="rounded-xl border border-border bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-4"><div><h3 className="font-semibold text-foreground">{summary.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {summary.alunoMatricula}</p></div><div className="text-right"><p className="text-2xl font-bold text-destructive">{summary.totalFaltas}</p><p className="text-xs text-muted-foreground">faltas</p></div></div><p className="mt-3 text-sm text-foreground">{summary.disciplinaNome}</p><p className="mt-1 text-xs text-muted-foreground">Prof. {summary.professorNome} • {summary.turmaLabel}</p><p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">{summary.quantidade} {summary.quantidade === 1 ? 'lançamento registrado' : 'lançamentos registrados'}</p></article>)}</div></>;
 }
 

@@ -38,7 +38,7 @@ Thumbs.db
 *.sln
 *.sw?
 
-# Java / Spring Boot (safe if a backend is added to this repository)
+# Java / Spring Boot
 target/
 *.class
 *.jar
