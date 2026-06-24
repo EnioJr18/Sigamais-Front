@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/Pagination';
 import { Select } from '@/components/ui/select';
 import {
   Table,
@@ -48,6 +49,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { usePagination } from '@/hooks/usePagination';
 import {
   atualizarAlertaRisco,
   listarAlertasRisco,
@@ -150,6 +152,9 @@ function RiskInterventions() {
       return matchesStatus && matchesSearch;
     });
   }, [alerts, search, statusFilter]);
+  const pagination = usePagination(filtered, {
+    resetKey: `${search}|${statusFilter}`,
+  });
 
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: InterventionForm }) =>
@@ -271,7 +276,20 @@ function RiskInterventions() {
               description="Ajuste a busca ou o filtro de status para ver outros casos."
             />
           ) : (
-            <AlertList alerts={filtered} onUpdate={openIntervention} />
+            <>
+              <AlertList
+                alerts={pagination.pageItems}
+                onUpdate={openIntervention}
+              />
+              <Pagination
+                page={pagination.page}
+                pageSize={pagination.pageSize}
+                totalItems={pagination.totalItems}
+                onPageChange={pagination.setPage}
+                onPageSizeChange={pagination.setPageSize}
+                itemLabel="alertas"
+              />
+            </>
           )}
         </CardContent>
       </Card>

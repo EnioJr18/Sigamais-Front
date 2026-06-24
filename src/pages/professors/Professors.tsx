@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/Pagination';
 import {
   Table,
   TableBody,
@@ -38,6 +39,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { canManageStructure } from '@/lib/rbac';
+import { usePagination } from '@/hooks/usePagination';
 import { getApiErrorMessage } from '@/services/http';
 import {
   atualizarProfessor,
@@ -220,6 +222,7 @@ function Professors() {
         .includes(term),
     );
   }, [professoresQuery.data, search]);
+  const pagination = usePagination(filtered, { resetKey: search });
 
   function openCreate() {
     setEditing(null);
@@ -306,15 +309,25 @@ function Professors() {
               }
             />
           ) : (
-            <ProfessorList
-              professores={filtered}
-              canManage={canManage}
-              onEdit={openEdit}
-              onDelete={item => {
-                setFeedback(null);
-                setDeleting(item);
-              }}
-            />
+            <>
+              <ProfessorList
+                professores={pagination.pageItems}
+                canManage={canManage}
+                onEdit={openEdit}
+                onDelete={item => {
+                  setFeedback(null);
+                  setDeleting(item);
+                }}
+              />
+              <Pagination
+                page={pagination.page}
+                pageSize={pagination.pageSize}
+                totalItems={pagination.totalItems}
+                onPageChange={pagination.setPage}
+                onPageSizeChange={pagination.setPageSize}
+                itemLabel="professores"
+              />
+            </>
           )}
         </CardContent>
       </Card>

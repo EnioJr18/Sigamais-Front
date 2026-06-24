@@ -29,6 +29,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/Pagination';
 import { Select } from '@/components/ui/select';
 import {
   Table,
@@ -39,6 +40,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { canManageStructure } from '@/lib/rbac';
+import { usePagination } from '@/hooks/usePagination';
 import {
   getDisciplinaName,
   listarDisciplinas,
@@ -208,6 +210,7 @@ function Classes() {
         .includes(term);
     });
   }, [disciplinas, professores, search, turmasQuery.data]);
+  const pagination = usePagination(filtered, { resetKey: search });
 
   function openCreate() {
     setEditing(null);
@@ -328,17 +331,27 @@ function Classes() {
               }
             />
           ) : (
-            <ClassList
-              turmas={filtered}
-              professores={professores}
-              disciplinas={disciplinas}
-              canManage={false}
-              onEdit={openEdit}
-              onDelete={item => {
-                setFeedback(null);
-                setDeleting(item);
-              }}
-            />
+            <>
+              <ClassList
+                turmas={pagination.pageItems}
+                professores={professores}
+                disciplinas={disciplinas}
+                canManage={false}
+                onEdit={openEdit}
+                onDelete={item => {
+                  setFeedback(null);
+                  setDeleting(item);
+                }}
+              />
+              <Pagination
+                page={pagination.page}
+                pageSize={pagination.pageSize}
+                totalItems={pagination.totalItems}
+                onPageChange={pagination.setPage}
+                onPageSizeChange={pagination.setPageSize}
+                itemLabel="turmas"
+              />
+            </>
           )}
         </CardContent>
       </Card>

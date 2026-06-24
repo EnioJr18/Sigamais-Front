@@ -30,6 +30,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/Pagination';
 import {
   Table,
   TableBody,
@@ -39,6 +40,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { canManageStructure } from '@/lib/rbac';
+import { usePagination } from '@/hooks/usePagination';
 import {
   atualizarAluno,
   criarAluno,
@@ -160,6 +162,7 @@ function Students() {
         .includes(term),
     );
   }, [alunosQuery.data, search]);
+  const alunosPagination = usePagination(filteredAlunos, { resetKey: search });
 
   function openCreateForm() {
     setEditingAluno(null);
@@ -298,7 +301,7 @@ function Students() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredAlunos.map(aluno => (
+                    {alunosPagination.pageItems.map(aluno => (
                       <TableRow key={aluno.id}>
                         <TableCell className="font-medium text-foreground">
                           {getAlunoName(aluno)}
@@ -326,7 +329,7 @@ function Students() {
               </div>
 
               <div className="grid gap-3 md:hidden">
-                {filteredAlunos.map(aluno => (
+                {alunosPagination.pageItems.map(aluno => (
                   <article
                     key={aluno.id}
                     className="rounded-xl border border-border bg-card p-4 shadow-sm"
@@ -362,6 +365,14 @@ function Students() {
                   </article>
                 ))}
               </div>
+              <Pagination
+                page={alunosPagination.page}
+                pageSize={alunosPagination.pageSize}
+                totalItems={alunosPagination.totalItems}
+                onPageChange={alunosPagination.setPage}
+                onPageSizeChange={alunosPagination.setPageSize}
+                itemLabel="alunos"
+              />
             </>
           )}
         </CardContent>

@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/Pagination';
 import { Select } from '@/components/ui/select';
 import {
   Table,
@@ -39,6 +40,7 @@ import {
 } from '@/components/ui/table';
 import { getMatriculaContext } from '@/lib/academic';
 import { canManageStructure } from '@/lib/rbac';
+import { usePagination } from '@/hooks/usePagination';
 import {
   getAlunoName,
   getAlunoRegistration,
@@ -142,6 +144,7 @@ function Enrollments() {
         .includes(term);
     });
   }, [alunos, matriculasQuery.data, search, turmas]);
+  const pagination = usePagination(filtered, { resetKey: search });
 
   function openCreate() {
     setFeedback(null);
@@ -221,16 +224,26 @@ function Enrollments() {
               action={canManage && !search && relationsAvailable ? <Button size="sm" onClick={openCreate}>Cadastrar matrícula</Button> : undefined}
             />
           ) : (
-            <EnrollmentList
-              matriculas={filtered}
-              alunos={alunos}
-              turmas={turmas}
-              canManage={false}
-              onDelete={item => {
-                setFeedback(null);
-                setDeleting(item);
-              }}
-            />
+            <>
+              <EnrollmentList
+                matriculas={pagination.pageItems}
+                alunos={alunos}
+                turmas={turmas}
+                canManage={false}
+                onDelete={item => {
+                  setFeedback(null);
+                  setDeleting(item);
+                }}
+              />
+              <Pagination
+                page={pagination.page}
+                pageSize={pagination.pageSize}
+                totalItems={pagination.totalItems}
+                onPageChange={pagination.setPage}
+                onPageSizeChange={pagination.setPageSize}
+                itemLabel="matrículas"
+              />
+            </>
           )}
         </CardContent>
       </Card>
