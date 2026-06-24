@@ -49,7 +49,10 @@ import {
   type Disciplina,
   type DisciplinaPayload,
 } from '@/services/disciplinaService';
-import { getApiErrorMessage } from '@/services/http';
+import {
+  getApiErrorMessage,
+  getOperationErrorMessage,
+} from '@/services/http';
 
 const disciplinaSchema = z.object({
   nome: z.string().trim().min(2, 'Informe o nome da disciplina.'),
@@ -112,10 +115,15 @@ function Disciplines() {
     onError: error =>
       setFeedback({
         type: 'error',
-        message: getApiErrorMessage(
-          error,
-          'Não foi possível salvar a disciplina.',
-        ),
+        message: editing
+          ? getOperationErrorMessage(error, {
+              badRequest:
+                'Não foi possível atualizar esta disciplina. Verifique os dados informados.',
+            })
+          : getApiErrorMessage(
+              error,
+              'Não foi possível salvar a disciplina.',
+            ),
       }),
   });
 
@@ -126,16 +134,16 @@ function Disciplines() {
       setDeleting(null);
       setFeedback({
         type: 'success',
-        message: 'Disciplina excluída com sucesso.',
+        message: 'Disciplina apagada com sucesso.',
       });
     },
     onError: error =>
       setFeedback({
         type: 'error',
-        message: getApiErrorMessage(
-          error,
-          'Não foi possível excluir a disciplina.',
-        ),
+        message: getOperationErrorMessage(error, {
+          badRequest:
+            'Não foi possível apagar esta disciplina. Ela pode estar vinculada a turmas.',
+        }),
       }),
   });
 
@@ -255,7 +263,7 @@ function Disciplines() {
             <>
               <DisciplineList
                 disciplinas={pagination.pageItems}
-                canManage={false}
+                canManage={canManage}
                 onEdit={openEdit}
                 onDelete={item => {
                   setFeedback(null);
@@ -325,6 +333,10 @@ function Disciplines() {
         error={feedback?.type === 'error' ? feedback.message : undefined}
         onClose={() => setDeleting(null)}
         onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
+        title="Apagar disciplina"
+        confirmationMessage="Tem certeza que deseja apagar esta disciplina? Esta ação não poderá ser desfeita."
+        confirmLabel="Apagar"
+        pendingLabel="Apagando..."
       />
     </motion.section>
   );

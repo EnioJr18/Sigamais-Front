@@ -77,13 +77,19 @@ export async function criarTurma(payload: TurmaPayload) {
 }
 
 export async function atualizarTurma(id: number, payload: TurmaPayload) {
-  // PENDÊNCIA BACKEND: não existe PUT /turmas/{id}.
-  const response = await api.put<TurmaApiResponse>(`/turmas/${id}`, payload);
-  return normalizeTurma(response.data);
+  const response = await api.put<TurmaApiResponse>(`/turmas/${id}`, {
+    professorId: Number(payload.professorId),
+    disciplinaId: Number(payload.disciplinaId),
+    semestre: payload.semestre,
+    ano: Number(payload.ano),
+    vagas: Number(payload.vagas),
+  });
+  return response.data
+    ? normalizeTurma(response.data)
+    : normalizeTurma({ id, ...payload });
 }
 
 export async function excluirTurma(id: number) {
-  // PENDÊNCIA BACKEND: não existe DELETE /turmas/{id}.
   await api.delete(`/turmas/${id}`);
 }
 

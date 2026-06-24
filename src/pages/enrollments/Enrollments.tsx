@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { motion } from 'framer-motion';
-import { GraduationCap, Plus, Search, Trash2 } from 'lucide-react';
+import { GraduationCap, Plus, Search } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -13,6 +13,7 @@ import {
   FeedbackBanner,
   FormField,
   InlineError,
+  RowActions,
   type Feedback,
 } from '@/components/entities/CrudElements';
 import { EmptyState } from '@/components/feedback/EmptyState';
@@ -47,8 +48,12 @@ import {
   listarAlunos,
   type Aluno,
 } from '@/services/alunoService';
-import { getApiErrorMessage } from '@/services/http';
 import {
+  getApiErrorMessage,
+  getOperationErrorMessage,
+} from '@/services/http';
+import {
+  atualizarMatricula,
   criarMatricula,
   excluirMatricula,
   listarMatriculas,
@@ -69,6 +74,7 @@ function Enrollments() {
   const canManage = canManageStructure();
   const [search, setSearch] = useState('');
   const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Matricula | null>(null);
   const [deleting, setDeleting] = useState<Matricula | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
@@ -100,15 +106,30 @@ function Enrollments() {
     ]);
   };
 
-  const createMutation = useMutation({
-    mutationFn: (payload: MatriculaPayload) => criarMatricula(payload),
+  const saveMutation = useMutation({
+    mutationFn: (payload: MatriculaPayload) =>
+      editing
+        ? atualizarMatricula(editing.id, payload)
+        : criarMatricula(payload),
     onSuccess: async () => {
+      const action = editing ? 'atualizada' : 'criada';
       await refreshData();
-      setFeedback({ type: 'success', message: 'Matrícula criada com sucesso.' });
+      setFeedback({
+        type: 'success',
+        message: `Matrícula ${action} com sucesso.`,
+      });
       closeForm();
     },
     onError: error =>
-      setFeedback({ type: 'error', message: getEnrollmentError(error) }),
+      setFeedback({
+        type: 'error',
+        message: editing
+          ? getOperationErrorMessage(error, {
+              badRequest:
+                'Não foi possível atualizar esta matrícula. Verifique o aluno e a turma informados.',
+            })
+          : getEnrollmentError(error),
+      }),
   });
 
   const deleteMutation = useMutation({
@@ -116,12 +137,15 @@ function Enrollments() {
     onSuccess: async () => {
       await refreshData();
       setDeleting(null);
-      setFeedback({ type: 'success', message: 'Matrícula excluída com sucesso.' });
+      setFeedback({ type: 'success', message: 'Matrícula apagada com sucesso.' });
     },
     onError: error =>
       setFeedback({
         type: 'error',
-        message: getApiErrorMessage(error, 'Não foi possível excluir a matrícula.'),
+        message: getOperationErrorMessage(error, {
+          badRequest:
+            'Não foi possível apagar esta matrícula. Ela pode possuir notas, frequências ou alertas vinculados.',
+        }),
       }),
   });
 
@@ -147,13 +171,25 @@ function Enrollments() {
   const pagination = usePagination(filtered, { resetKey: search });
 
   function openCreate() {
+    setEditing(null);
     setFeedback(null);
     reset({ alunoId: alunos[0]?.id ?? 0, turmaId: turmas[0]?.id ?? 0 });
     setFormOpen(true);
   }
 
+  function openEdit(matricula: Matricula) {
+    setEditing(matricula);
+    setFeedback(null);
+    reset({
+      alunoId: matricula.alunoId ?? 0,
+      turmaId: matricula.turmaId ?? 0,
+    });
+    setFormOpen(true);
+  }
+
   function closeForm() {
     setFormOpen(false);
+    setEditing(null);
     reset({ alunoId: 0, turmaId: 0 });
   }
 
@@ -229,7 +265,8 @@ function Enrollments() {
                 matriculas={pagination.pageItems}
                 alunos={alunos}
                 turmas={turmas}
-                canManage={false}
+                canManage={canManage}
+                onEdit={openEdit}
                 onDelete={item => {
                   setFeedback(null);
                   setDeleting(item);
@@ -250,13 +287,13 @@ function Enrollments() {
 
       <Modal
         open={formOpen}
-        title="Criar matrícula"
+        title={editing ? 'Editar matrícula' : 'Criar matrícula'}
         description="Selecione o aluno e a turma para efetivar o vínculo."
         onClose={closeForm}
       >
         <form
           onSubmit={handleSubmit(data =>
-            createMutation.mutate({
+            saveMutation.mutate({
               alunoId: Number(data.alunoId),
               turmaId: Number(data.turmaId),
             }),
@@ -278,8 +315,12 @@ function Enrollments() {
           </FormField>
           <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
             <Button variant="ghost" onClick={closeForm}>Cancelar</Button>
-            <Button type="submit" disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Matriculando...' : 'Criar matrícula'}
+            <Button type="submit" disabled={saveMutation.isPending}>
+              {saveMutation.isPending
+                ? 'Salvando...'
+                : editing
+                  ? 'Salvar alterações'
+                  : 'Criar matrícula'}
             </Button>
           </div>
         </form>
@@ -293,16 +334,21 @@ function Enrollments() {
         error={feedback?.type === 'error' ? feedback.message : undefined}
         onClose={() => setDeleting(null)}
         onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
+        title="Apagar matrícula"
+        confirmationMessage="Tem certeza que deseja apagar esta matrícula? Esta ação não poderá ser desfeita."
+        confirmLabel="Apagar"
+        pendingLabel="Apagando..."
       />
     </motion.section>
   );
 }
 
-function EnrollmentList({ matriculas, alunos, turmas, canManage, onDelete }: {
+function EnrollmentList({ matriculas, alunos, turmas, canManage, onEdit, onDelete }: {
   matriculas: Matricula[];
   alunos: Awaited<ReturnType<typeof listarAlunos>>;
   turmas: Awaited<ReturnType<typeof listarTurmas>>;
   canManage: boolean;
+  onEdit: (item: Matricula) => void;
   onDelete: (item: Matricula) => void;
 }) {
   return (
@@ -313,7 +359,7 @@ function EnrollmentList({ matriculas, alunos, turmas, canManage, onDelete }: {
           <TableBody>
             {matriculas.map(item => {
               const context = getMatriculaContext(item, alunos, turmas);
-              return <TableRow key={item.id}><TableCell>#{item.id}</TableCell><TableCell className="font-medium text-foreground">{context.alunoLabel}</TableCell><TableCell>{context.alunoMatricula}</TableCell><TableCell>{context.turmaLabel}</TableCell><TableCell>{context.disciplinaNome}</TableCell><TableCell>{context.professorNome}</TableCell>{canManage && <TableCell><div className="flex justify-end"><Button variant="ghost" size="icon" className="text-destructive hover:bg-destructive/10" onClick={() => onDelete(item)} aria-label={`Excluir matrícula ${item.id}`}><Trash2 className="h-4 w-4" /></Button></div></TableCell>}</TableRow>;
+              return <TableRow key={item.id}><TableCell>#{item.id}</TableCell><TableCell className="font-medium text-foreground">{context.alunoLabel}</TableCell><TableCell>{context.alunoMatricula}</TableCell><TableCell>{context.turmaLabel}</TableCell><TableCell>{context.disciplinaNome}</TableCell><TableCell>{context.professorNome}</TableCell>{canManage && <TableCell><RowActions item={item} label={`matrícula ${item.id}`} onEdit={onEdit} onDelete={onDelete} /></TableCell>}</TableRow>;
             })}
           </TableBody>
         </Table>
@@ -321,7 +367,7 @@ function EnrollmentList({ matriculas, alunos, turmas, canManage, onDelete }: {
       <div className="grid gap-3 lg:hidden">
         {matriculas.map(item => {
           const context = getMatriculaContext(item, alunos, turmas);
-          return <article key={item.id} className="rounded-xl border border-border bg-card p-4 shadow-sm"><div className="flex items-start justify-between"><div><h3 className="font-medium text-foreground">{context.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {context.alunoMatricula}</p></div><span className="text-xs text-accent">#{item.id}</span></div><dl className="mt-4 grid gap-2 text-sm"><Relation label="Turma / semestre" value={context.turmaLabel} /><Relation label="Disciplina" value={context.disciplinaNome} /><Relation label="Professor" value={context.professorNome} /></dl>{canManage && <div className="mt-4 border-t border-border pt-3"><Button variant="ghost" size="sm" className="text-destructive" onClick={() => onDelete(item)}><Trash2 className="h-4 w-4" />Excluir</Button></div>}</article>;
+          return <article key={item.id} className="rounded-xl border border-border bg-card p-4 shadow-sm"><div className="flex items-start justify-between"><div><h3 className="font-medium text-foreground">{context.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {context.alunoMatricula}</p></div><span className="text-xs text-accent">#{item.id}</span></div><dl className="mt-4 grid gap-2 text-sm"><Relation label="Turma / semestre" value={context.turmaLabel} /><Relation label="Disciplina" value={context.disciplinaNome} /><Relation label="Professor" value={context.professorNome} /></dl>{canManage && <div className="mt-4 border-t border-border pt-3"><RowActions item={item} label={`matrícula ${item.id}`} onEdit={onEdit} onDelete={onDelete} /></div>}</article>;
         })}
       </div>
     </>
