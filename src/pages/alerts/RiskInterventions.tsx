@@ -9,6 +9,8 @@ import {
   BellRing,
   CircleCheck,
   Clock3,
+  History,
+  LoaderCircle,
   Search,
   ShieldAlert,
 } from 'lucide-react';
@@ -49,7 +51,9 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   atualizarAlertaRisco,
   listarAlertasRisco,
+  listarHistoricoAlertaRisco,
   type AlertaRisco,
+  type HistoricoAlertaRisco,
   type NivelRiscoAlerta,
   type StatusAlerta,
 } from '@/services/alertaRiscoService';
@@ -102,6 +106,11 @@ function RiskInterventions() {
     queryKey: ['alertas-risco'],
     queryFn: listarAlertasRisco,
   });
+  const historyQuery = useQuery({
+    queryKey: ['alertas-risco-historico', selected?.id],
+    queryFn: () => listarHistoricoAlertaRisco(selected!.id),
+    enabled: Boolean(selected),
+  });
   const {
     register,
     handleSubmit,
@@ -143,12 +152,21 @@ function RiskInterventions() {
   }, [alerts, search, statusFilter]);
 
   const updateMutation = useMutation({
-    mutationFn: (data: InterventionForm) =>
-      atualizarAlertaRisco(selected!.id, data),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['alertas-risco'] });
-      setSelected(null);
-      reset();
+    mutationFn: ({ id, data }: { id: number; data: InterventionForm }) =>
+      atualizarAlertaRisco(id, data),
+    onSuccess: async (_, { id, data }) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['alertas-risco'] }),
+        queryClient.invalidateQueries({
+          queryKey: ['alertas-risco-historico', id],
+        }),
+      ]);
+      setSelected(current =>
+        current?.id === id
+          ? { ...current, status: data.status, observacao: data.observacao }
+          : current,
+      );
+      reset(data);
       setFeedback({
         type: 'success',
         message: 'Acompanhamento atualizado com sucesso.',
@@ -267,10 +285,15 @@ function RiskInterventions() {
         {selected && (
           <form
             className="space-y-5"
-            onSubmit={handleSubmit(data => updateMutation.mutate(data))}
+            onSubmit={handleSubmit(data =>
+              updateMutation.mutate({ id: selected.id, data }),
+            )}
           >
             {feedback?.type === 'error' && (
               <InlineError message={feedback.message} />
+            )}
+            {feedback?.type === 'success' && (
+              <FeedbackBanner feedback={feedback} />
             )}
             <div className="rounded-xl border border-border bg-muted/30 p-4">
               <div className="flex items-start justify-between gap-3">
@@ -295,6 +318,12 @@ function RiskInterventions() {
                 </ul>
               )}
             </div>
+            <HistoryTimeline
+              history={historyQuery.data ?? []}
+              loading={historyQuery.isLoading}
+              error={historyQuery.isError}
+              onRetry={() => historyQuery.refetch()}
+            />
             <FormField label="Status" error={errors.status?.message}>
               <Select {...register('status')}>
                 <option value="PENDENTE">Pendente</option>
@@ -329,6 +358,78 @@ function RiskInterventions() {
           </form>
         )}
       </Modal>
+    </section>
+  );
+}
+
+function HistoryTimeline({
+  history,
+  loading,
+  error,
+  onRetry,
+}: {
+  history: HistoricoAlertaRisco[];
+  loading: boolean;
+  error: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <section className="border-y border-border py-5">
+      <div className="flex items-center gap-2">
+        <History className="h-4 w-4 text-primary" />
+        <h3 className="text-sm font-semibold text-foreground">
+          Histórico de acompanhamento
+        </h3>
+      </div>
+
+      {loading ? (
+        <div className="mt-4 flex items-center gap-2 rounded-xl bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+          <LoaderCircle className="h-4 w-4 animate-spin text-primary" />
+          Carregando histórico...
+        </div>
+      ) : error ? (
+        <div className="mt-4 rounded-xl border border-destructive/20 bg-destructive/5 p-4">
+          <p className="text-sm text-muted-foreground">
+            Não foi possível carregar o histórico deste alerta.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-3"
+            onClick={onRetry}
+          >
+            Tentar novamente
+          </Button>
+        </div>
+      ) : history.length === 0 ? (
+        <p className="mt-4 rounded-xl border border-dashed border-border px-4 py-4 text-sm text-muted-foreground">
+          Nenhum histórico registrado para este alerta.
+        </p>
+      ) : (
+        <ol className="relative ml-2 mt-5 border-l border-border">
+          {history.map((item, index) => (
+            <li
+              key={item.id}
+              className={`relative ml-5 ${index < history.length - 1 ? 'pb-6' : ''}`}
+            >
+              <span className="absolute -left-[1.63rem] top-1.5 h-3 w-3 rounded-full border-2 border-card bg-primary ring-2 ring-primary/15" />
+              <div className="flex flex-wrap items-center gap-2">
+                <time className="text-xs font-medium text-muted-foreground">
+                  {formatDateTime(item.criadoEm)}
+                </time>
+                <StatusBadge status={item.status} />
+              </div>
+              <p className="mt-2 text-sm font-semibold text-foreground">
+                {item.responsavelNome}
+              </p>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                {item.observacao}
+              </p>
+            </li>
+          ))}
+        </ol>
+      )}
     </section>
   );
 }
@@ -470,6 +571,20 @@ function formatDate(value?: string) {
         day: '2-digit',
         month: '2-digit',
         year: 'numeric',
+      });
+}
+
+function formatDateTime(value?: string) {
+  if (!value) return 'Data não informada';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
       });
 }
 

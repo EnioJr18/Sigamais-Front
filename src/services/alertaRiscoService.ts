@@ -24,6 +24,22 @@ export interface AtualizarAlertaRiscoPayload {
   observacao: string;
 }
 
+export interface HistoricoAlertaRisco {
+  id: number;
+  status: StatusAlerta;
+  observacao: string;
+  criadoEm?: string;
+  responsavelNome: string;
+}
+
+interface HistoricoAlertaRiscoRaw {
+  id?: number | string;
+  status?: string;
+  observacao?: string | null;
+  criadoEm?: string | null;
+  responsavelNome?: string | null;
+}
+
 interface AlertaRiscoRaw {
   id?: number | string;
   alunoNome?: string;
@@ -115,4 +131,22 @@ export async function atualizarAlertaRisco(
 
 export async function notificarCoordenacao(matriculaId: number) {
   await api.post(`/alertas-risco/${matriculaId}/notificar`);
+}
+
+export async function listarHistoricoAlertaRisco(id: number) {
+  const response = await api.get(`/alertas-risco/${id}/historico`);
+
+  return extractList<HistoricoAlertaRiscoRaw>(response.data)
+    .map(item => ({
+      id: Number(item.id),
+      status: normalizeStatus(item.status),
+      observacao: item.observacao?.trim() || 'Sem observação registrada.',
+      criadoEm: item.criadoEm ?? undefined,
+      responsavelNome: item.responsavelNome?.trim() || 'Não informado',
+    }))
+    .sort((first, second) => {
+      const firstDate = first.criadoEm ? Date.parse(first.criadoEm) : 0;
+      const secondDate = second.criadoEm ? Date.parse(second.criadoEm) : 0;
+      return firstDate - secondDate;
+    });
 }
