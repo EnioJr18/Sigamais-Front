@@ -46,7 +46,10 @@ import {
   listarDisciplinas,
   type Disciplina,
 } from '@/services/disciplinaService';
-import { getApiErrorMessage } from '@/services/http';
+import {
+  getApiErrorMessage,
+  getOperationErrorMessage,
+} from '@/services/http';
 import {
   getProfessorName,
   listarProfessores,
@@ -172,7 +175,12 @@ function Classes() {
     onError: error =>
       setFeedback({
         type: 'error',
-        message: getTurmaSaveError(error),
+        message: editing
+          ? getOperationErrorMessage(error, {
+              badRequest:
+                'Não foi possível atualizar esta turma. Verifique professor, disciplina, semestre, ano e vagas.',
+            })
+          : getTurmaSaveError(error),
       }),
   });
 
@@ -181,12 +189,15 @@ function Classes() {
     onSuccess: async () => {
       await refreshData();
       setDeleting(null);
-      setFeedback({ type: 'success', message: 'Turma excluída com sucesso.' });
+      setFeedback({ type: 'success', message: 'Turma apagada com sucesso.' });
     },
     onError: error =>
       setFeedback({
         type: 'error',
-        message: getApiErrorMessage(error, 'Não foi possível excluir a turma.'),
+        message: getOperationErrorMessage(error, {
+          badRequest:
+            'Não foi possível apagar esta turma. Ela pode possuir matrículas vinculadas.',
+        }),
       }),
   });
 
@@ -336,7 +347,7 @@ function Classes() {
                 turmas={pagination.pageItems}
                 professores={professores}
                 disciplinas={disciplinas}
-                canManage={false}
+                canManage={canManage}
                 onEdit={openEdit}
                 onDelete={item => {
                   setFeedback(null);
@@ -429,6 +440,10 @@ function Classes() {
         error={feedback?.type === 'error' ? feedback.message : undefined}
         onClose={() => setDeleting(null)}
         onConfirm={() => deleting && deleteMutation.mutate(deleting.id)}
+        title="Apagar turma"
+        confirmationMessage="Tem certeza que deseja apagar esta turma? Esta ação não poderá ser desfeita."
+        confirmLabel="Apagar"
+        pendingLabel="Apagando..."
       />
     </motion.section>
   );

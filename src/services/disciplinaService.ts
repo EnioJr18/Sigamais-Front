@@ -34,13 +34,11 @@ export async function atualizarDisciplina(
   id: number,
   payload: DisciplinaPayload,
 ) {
-  // PENDÊNCIA BACKEND: não existe PUT /disciplinas/{id}.
   const response = await api.put<Disciplina>(`/disciplinas/${id}`, payload);
   return response.data;
 }
 
 export async function excluirDisciplina(id: number) {
-  // PENDÊNCIA BACKEND: não existe DELETE /disciplinas/{id}.
   await api.delete(`/disciplinas/${id}`);
 }
 

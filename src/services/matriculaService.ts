@@ -112,8 +112,20 @@ export async function criarMatricula(payload: MatriculaPayload) {
   return normalizeMatricula(response.data);
 }
 
+export async function atualizarMatricula(
+  id: number,
+  payload: MatriculaPayload,
+) {
+  const response = await api.put<MatriculaApiResponse>(`/matriculas/${id}`, {
+    alunoId: Number(payload.alunoId),
+    turmaId: Number(payload.turmaId),
+  });
+  return response.data
+    ? normalizeMatricula(response.data)
+    : normalizeMatricula({ id, ...payload });
+}
+
 export async function excluirMatricula(id: number) {
-  // PENDÊNCIA BACKEND: não existe DELETE /matriculas/{id}.
   await api.delete(`/matriculas/${id}`);
 }
 
