@@ -242,7 +242,7 @@ function Students() {
           <div>
             <CardTitle>Estudantes cadastrados</CardTitle>
             <CardDescription className="mt-2">
-              Dados carregados diretamente da API do SIGA+.
+              Informações acadêmicas atualizadas e organizadas em um só lugar.
             </CardDescription>
           </div>
           <div className="relative w-full sm:max-w-sm">
@@ -261,7 +261,7 @@ function Students() {
             <LoadingState label="Carregando alunos..." />
           ) : alunosQuery.isError ? (
             <ErrorMessage
-              message="Não foi possível consultar os alunos. Verifique a API e tente novamente."
+              message="Não foi possível consultar os alunos. Tente novamente em instantes."
               onRetry={() => alunosQuery.refetch()}
             />
           ) : filteredAlunos.length === 0 ? (
@@ -370,7 +370,7 @@ function Students() {
       <Modal
         open={formOpen}
         title={editingAluno ? 'Editar aluno' : 'Cadastrar aluno'}
-        description="Preencha os dados que serão enviados para a API."
+        description="Preencha os dados acadêmicos do aluno."
         onClose={closeForm}
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

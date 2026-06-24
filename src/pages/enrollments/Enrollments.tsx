@@ -192,7 +192,7 @@ function Enrollments() {
           <div>
             <CardTitle>Matrículas registradas</CardTitle>
             <CardDescription className="mt-2">
-              Vínculos acadêmicos carregados diretamente da API.
+              Vínculos acadêmicos atualizados e organizados para consulta.
             </CardDescription>
           </div>
           <div className="relative w-full sm:max-w-sm">

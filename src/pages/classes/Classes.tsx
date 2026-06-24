@@ -91,7 +91,7 @@ function getTurmaSaveError(error: unknown) {
     return 'Não foi possível salvar a turma.';
   }
   if (!error.response) {
-    return 'Não foi possível conectar à API.';
+    return 'Não foi possível conectar ao sistema.';
   }
 
   switch (error.response.status) {
@@ -287,7 +287,7 @@ function Classes() {
           <div>
             <CardTitle>Turmas cadastradas</CardTitle>
             <CardDescription className="mt-2">
-              Relações acadêmicas carregadas diretamente da API.
+              Relações acadêmicas atualizadas e organizadas para consulta.
             </CardDescription>
           </div>
           <div className="relative w-full sm:max-w-sm">

@@ -9,6 +9,7 @@ export interface MeuPerfil {
   telefone: string;
   endereco: string;
   fotoPerfilUrl: string;
+  emRisco?: boolean;
 }
 
 export interface AtualizarPerfilPayload {

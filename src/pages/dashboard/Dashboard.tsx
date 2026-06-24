@@ -91,7 +91,7 @@ function Dashboard() {
       <PageContainer>
         <PageHeading />
         <ErrorMessage
-          message="Não foi possível carregar os indicadores. Verifique a conexão com a API."
+          message="Não foi possível carregar os indicadores acadêmicos. Tente novamente em instantes."
           onRetry={() => summaryQuery.refetch()}
         />
       </PageContainer>
@@ -121,8 +121,8 @@ function Dashboard() {
 
       {data.unavailable.length > 0 && (
         <div className="rounded-2xl border border-accent/25 bg-secondary px-4 py-3 text-sm text-secondary-foreground">
-          Alguns indicadores não responderam:{' '}
-          {data.unavailable.join(', ')}. Os demais dados continuam disponíveis.
+          Alguns indicadores estão temporariamente indisponíveis:{' '}
+          {data.unavailable.join(', ')}. As demais informações continuam disponíveis.
         </div>
       )}
 
@@ -172,21 +172,26 @@ function Dashboard() {
         <CardContent className="grid gap-6 p-6 lg:grid-cols-[1.4fr_0.6fr] lg:items-center">
           <div>
             <span className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-              Visão acadêmica
+              Sobre o SIGA+
             </span>
             <h2 className="mt-2 text-xl font-semibold text-foreground">
-              Dados integrados para apoiar decisões
+              Gestão acadêmica integrada e acompanhamento inteligente
             </h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Este painel consolida as listagens da API em tempo real. Os
-              próximos indicadores podem destacar frequência, desempenho e
-              risco de evasão por matrícula.
+              O SIGA+ reúne informações de alunos, professores, turmas,
+              matrículas, notas e frequência em um único ambiente. A plataforma
+              apoia a gestão acadêmica e ajuda a identificar estudantes que
+              precisam de acompanhamento pedagógico.
             </p>
           </div>
           <div className="rounded-2xl border border-primary/15 bg-primary/5 p-4">
-            <p className="text-sm font-medium text-primary">Fonte dos dados</p>
+            <p className="text-sm font-medium text-primary">
+              Diferencial do sistema
+            </p>
             <p className="mt-1 text-xs leading-5 text-muted-foreground">
-              API SIGA+ autenticada por JWT, sem valores demonstrativos.
+              O Alerta de Risco Acadêmico auxilia professores e coordenação na
+              identificação precoce de alunos com baixo desempenho ou excesso
+              de faltas, permitindo ações antes que o problema se agrave.
             </p>
           </div>
         </CardContent>

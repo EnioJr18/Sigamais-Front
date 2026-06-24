@@ -156,7 +156,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
             <p className="text-sm font-medium">Acesso seguro</p>
           </div>
           <p className="mt-2 text-xs leading-5 text-muted-foreground">
-            Sessão protegida por JWT e permissões acadêmicas.
+            Cada usuário acessa apenas as informações correspondentes ao seu
+            perfil acadêmico.
           </p>
         </div>
       </aside>

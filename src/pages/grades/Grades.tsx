@@ -176,7 +176,7 @@ function Grades() {
 
       <Card>
         <CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-          <div><CardTitle>Resumo de desempenho</CardTitle><CardDescription className="mt-2">{resumoQuery.isSuccess ? 'Dados consolidados pela API.' : 'Resumo local temporário baseado nos lançamentos individuais.'}</CardDescription></div>
+          <div><CardTitle>Resumo de desempenho</CardTitle><CardDescription className="mt-2">{resumoQuery.isSuccess ? 'Dados acadêmicos consolidados.' : 'Resumo calculado a partir dos registros disponíveis.'}</CardDescription></div>
           <div className="relative w-full sm:max-w-sm"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar aluno, turma, matrícula ou nota" className="pl-9" /></div>
         </CardHeader>
         <CardContent>
@@ -185,7 +185,7 @@ function Grades() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Lançamentos individuais</CardTitle><CardDescription>Histórico detalhado das notas retornadas por GET /notas.</CardDescription></CardHeader>
+        <CardHeader><CardTitle>Lançamentos individuais</CardTitle><CardDescription>Histórico detalhado das avaliações registradas.</CardDescription></CardHeader>
         <CardContent>{notasQuery.isLoading ? <LoadingState label="Carregando lançamentos..." /> : notasQuery.isError ? <ErrorMessage message="Não foi possível consultar os lançamentos individuais." onRetry={() => notasQuery.refetch()} /> : filtered.length === 0 ? <EmptyState icon={Calculator} title="Nenhum lançamento encontrado" description="Não há notas individuais para os filtros atuais." /> : <GradeList notas={filtered} matriculas={matriculas} alunos={alunos} turmas={turmas} canManage={false} onEdit={openEdit} onDelete={item => { setFeedback(null); setDeleting(item); }} />}</CardContent>
       </Card>
 

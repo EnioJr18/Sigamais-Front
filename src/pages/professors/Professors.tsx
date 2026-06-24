@@ -265,7 +265,7 @@ function Professors() {
           <div>
             <CardTitle>Professores cadastrados</CardTitle>
             <CardDescription className="mt-2">
-              Corpo docente carregado diretamente da API.
+              Corpo docente atualizado e organizado para consulta.
             </CardDescription>
           </div>
           <div className="relative w-full sm:max-w-sm">
@@ -322,7 +322,7 @@ function Professors() {
       <Modal
         open={formOpen}
         title={editing ? 'Editar professor' : 'Cadastrar professor'}
-        description="Preencha os dados que serão enviados para a API."
+        description="Preencha os dados acadêmicos do professor."
         onClose={closeForm}
       >
         <form

@@ -56,7 +56,7 @@ function getPasswordErrorMessage(error: unknown) {
   }
 
   if (!error.response) {
-    return 'Não foi possível conectar à API.';
+    return 'Não foi possível conectar ao sistema.';
   }
 
   const data = error.response.data as

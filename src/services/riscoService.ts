@@ -30,6 +30,8 @@ interface RiscoProfessorRaw {
   disciplina?: string;
   professorNome?: string;
   semestre?: string;
+  turmaSemestre?: string;
+  periodo?: string;
   risco?: RiscoResponse | NivelRisco;
   media?: number;
   faltas?: number;
@@ -84,7 +86,11 @@ export async function listarRiscosDoProfessor() {
       disciplinaNome:
         item.disciplinaNome ?? item.disciplina ?? 'Disciplina não informada',
       professorNome: item.professorNome ?? 'Professor logado',
-      semestre: item.semestre ?? 'Semestre não informado',
+      semestre:
+        item.semestre ??
+        item.turmaSemestre ??
+        item.periodo ??
+        'Semestre não informado',
       risco: normalizeNivelRisco(level),
       media: detail.media === undefined ? undefined : Number(detail.media),
       faltas: detail.faltas === undefined ? undefined : Number(detail.faltas),

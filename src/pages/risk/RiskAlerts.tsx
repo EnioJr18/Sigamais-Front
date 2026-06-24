@@ -235,6 +235,7 @@ function ProfessorRiskView({ feedback, notification }: RiskViewProps) {
             risk={item}
             matriculaId={item.matriculaId}
             notification={notification}
+            explicitSemester
           />
         ))}
       </div>
@@ -337,6 +338,7 @@ interface RiskCardProps {
   risk?: RiscoResponse;
   matriculaId: number;
   notification: NotificationControls;
+  explicitSemester?: boolean;
 }
 
 function RiskCard({
@@ -349,11 +351,16 @@ function RiskCard({
   risk,
   matriculaId,
   notification,
+  explicitSemester = false,
 }: RiskCardProps) {
   const config = risk ? riskConfig[risk.risco] : null;
   const isPending = notification.pendingId === matriculaId;
   const notificationBusy = notification.pendingId !== undefined;
   const isNotified = notification.notifiedIds.has(matriculaId);
+  const semesterDisplay =
+    explicitSemester && semestre !== 'Semestre não informado'
+      ? `Semestre ${semestre}`
+      : semestre;
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -367,7 +374,7 @@ function RiskCard({
             <div>
               <CardTitle className="leading-tight">{alunoNome}</CardTitle>
               <CardDescription className="mt-2">
-                Matrícula {alunoMatricula} • {semestre}
+                Matrícula {alunoMatricula} • {semesterDisplay}
               </CardDescription>
             </div>
             <span className={`mt-1 h-4 w-4 shrink-0 rounded-full shadow-[0_0_14px_3px] ${config?.indicator ?? 'bg-muted shadow-none'}`} aria-label={config?.label ?? 'Risco indisponível'} />
@@ -377,7 +384,7 @@ function RiskCard({
           <dl className="mb-4 grid gap-2 border-b border-border pb-4 text-sm">
             <div><dt className="text-xs text-muted-foreground">Disciplina</dt><dd className="text-foreground">{disciplinaNome}</dd></div>
             <div><dt className="text-xs text-muted-foreground">Professor</dt><dd className="text-foreground">{professorNome}</dd></div>
-            <div><dt className="text-xs text-muted-foreground">Turma / semestre</dt><dd className="text-foreground">{semestre}</dd></div>
+            <div><dt className="text-xs text-muted-foreground">{explicitSemester ? 'Semestre' : 'Turma / semestre'}</dt><dd className="text-foreground">{semestre}</dd></div>
           </dl>
           {(risk?.media !== undefined || risk?.faltas !== undefined) && (
             <div className="mb-4 grid grid-cols-2 gap-3">
@@ -461,7 +468,7 @@ function getNotificationError(error: unknown) {
   if (!axios.isAxiosError(error)) {
     return 'Não foi possível notificar a coordenação.';
   }
-  if (!error.response) return 'Não foi possível conectar à API.';
+  if (!error.response) return 'Não foi possível conectar ao sistema.';
 
   const data = error.response.data as
     | string

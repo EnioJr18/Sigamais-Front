@@ -208,7 +208,7 @@ function Disciplines() {
           <div>
             <CardTitle>Disciplinas cadastradas</CardTitle>
             <CardDescription className="mt-2">
-              Componentes curriculares carregados da API.
+              Componentes curriculares organizados para consulta e gestão.
             </CardDescription>
           </div>
           <div className="relative w-full sm:max-w-sm">
@@ -265,7 +265,7 @@ function Disciplines() {
       <Modal
         open={formOpen}
         title={editing ? 'Editar disciplina' : 'Cadastrar disciplina'}
-        description="Preencha os dados que serão enviados para a API."
+        description="Preencha os dados da disciplina."
         onClose={closeForm}
       >
         <form

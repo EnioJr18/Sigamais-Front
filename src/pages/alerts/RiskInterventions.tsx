@@ -477,7 +477,7 @@ function getUpdateError(error: unknown) {
   if (!axios.isAxiosError(error)) {
     return 'Não foi possível atualizar o alerta.';
   }
-  if (!error.response) return 'Não foi possível conectar à API.';
+  if (!error.response) return 'Não foi possível conectar ao sistema.';
 
   switch (error.response.status) {
     case 400:
