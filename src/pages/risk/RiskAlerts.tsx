@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   LoaderCircle,
   RefreshCw,
+  Search,
   ShieldCheck,
 } from 'lucide-react';
 
@@ -32,7 +33,11 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Pagination } from '@/components/ui/Pagination';
+import { Select } from '@/components/ui/select';
 import { getMatriculaContext } from '@/lib/academic';
+import { usePagination } from '@/hooks/usePagination';
 import { normalizeUserRole } from '@/lib/rbac';
 import { listarAlunos } from '@/services/alunoService';
 import { notificarCoordenacao } from '@/services/alertaRiscoService';
@@ -85,6 +90,20 @@ const riskConfig: Record<
     bar: 'from-emerald-500 to-green-400',
   },
 };
+
+type RiskFilter = 'TODOS' | NivelRisco;
+
+interface RiskCardData {
+  key: string;
+  alunoNome: string;
+  alunoMatricula: string;
+  disciplinaNome: string;
+  professorNome: string;
+  semestre: string;
+  risk?: RiscoResponse;
+  matriculaId: number;
+  explicitSemester?: boolean;
+}
 
 function RiskAlerts() {
   const queryClient = useQueryClient();
@@ -212,6 +231,18 @@ function ProfessorRiskView({ feedback, notification }: RiskViewProps) {
     );
   }
 
+  const risks = query.data.map(item => ({
+    key: `${item.matriculaId}-${item.disciplinaNome}`,
+    alunoNome: item.alunoNome,
+    alunoMatricula: item.alunoMatricula,
+    disciplinaNome: item.disciplinaNome,
+    professorNome: item.professorNome,
+    semestre: item.semestre,
+    risk: item,
+    matriculaId: item.matriculaId,
+    explicitSemester: true,
+  }));
+
   return (
     <Page>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -222,23 +253,7 @@ function ProfessorRiskView({ feedback, notification }: RiskViewProps) {
         </Button>
       </div>
       {feedback && <FeedbackBanner feedback={feedback} />}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {query.data.map((item, index) => (
-          <RiskCard
-            key={`${item.matriculaId}-${item.disciplinaNome}`}
-            index={index}
-            alunoNome={item.alunoNome}
-            alunoMatricula={item.alunoMatricula}
-            disciplinaNome={item.disciplinaNome}
-            professorNome={item.professorNome}
-            semestre={item.semestre}
-            risk={item}
-            matriculaId={item.matriculaId}
-            notification={notification}
-            explicitSemester
-          />
-        ))}
-      </div>
+      <RiskCardList risks={risks} notification={notification} />
       <RiskLegend />
     </Page>
   );
@@ -303,28 +318,138 @@ function AdminRiskView({ feedback, notification }: RiskViewProps) {
           resultados continuam disponíveis.
         </div>
       )}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {matriculas.map((matricula, index) => {
+      <RiskCardList
+        risks={matriculas.map((matricula, index) => {
           const risk = riskQueries[index]?.data;
           const context = getMatriculaContext(matricula, alunos, turmas);
-          return (
-            <RiskCard
-              key={matricula.id}
-              index={index}
-              alunoNome={context.alunoLabel}
-              alunoMatricula={context.alunoMatricula}
-              disciplinaNome={context.disciplinaNome}
-              professorNome={context.professorNome}
-              semestre={context.turmaLabel}
-              risk={risk}
-              matriculaId={matricula.id}
-              notification={notification}
-            />
-          );
+
+          return {
+            key: String(matricula.id),
+            alunoNome: context.alunoLabel,
+            alunoMatricula: context.alunoMatricula,
+            disciplinaNome: context.disciplinaNome,
+            professorNome: context.professorNome,
+            semestre: context.turmaLabel,
+            risk,
+            matriculaId: matricula.id,
+          };
         })}
-      </div>
+        notification={notification}
+      />
       <RiskLegend />
     </Page>
+  );
+}
+
+function RiskCardList({
+  risks,
+  notification,
+}: {
+  risks: RiskCardData[];
+  notification: NotificationControls;
+}) {
+  const [search, setSearch] = useState('');
+  const [riskFilter, setRiskFilter] = useState<RiskFilter>('TODOS');
+  const filteredRisks = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase('pt-BR');
+
+    return risks
+      .filter(item => riskFilter === 'TODOS' || item.risk?.risco === riskFilter)
+      .filter(item => {
+        if (!term) return true;
+
+        return [
+          item.alunoNome,
+          item.alunoMatricula,
+          item.disciplinaNome,
+          item.professorNome,
+          item.semestre,
+          item.risk?.risco,
+          ...(item.risk?.motivos ?? []),
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLocaleLowerCase('pt-BR')
+          .includes(term);
+      });
+  }, [riskFilter, risks, search]);
+  const pagination = usePagination(filteredRisks, {
+    initialPageSize: 12,
+    resetKey: `${search}|${riskFilter}`,
+  });
+
+  return (
+    <Card>
+      <CardHeader className="gap-4 lg:flex-row lg:items-center lg:justify-between lg:space-y-0">
+        <div>
+          <CardTitle>Alertas analisados</CardTitle>
+          <CardDescription className="mt-2">
+            Busque, filtre por nível de risco e acompanhe os estudantes que
+            precisam de atenção.
+          </CardDescription>
+        </div>
+        <div className="grid w-full gap-3 sm:grid-cols-[1fr_180px] lg:max-w-2xl">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={event => setSearch(event.target.value)}
+              placeholder="Buscar por aluno, matrícula, disciplina ou professor..."
+              className="pl-9"
+              aria-label="Buscar alertas de risco"
+            />
+          </div>
+          <Select
+            value={riskFilter}
+            onChange={event => setRiskFilter(event.target.value as RiskFilter)}
+            aria-label="Filtrar por nÃ­vel de risco"
+          >
+            <option value="TODOS">Todos</option>
+            <option value="ALTO">Alto</option>
+            <option value="MEDIO">Médio</option>
+            <option value="BAIXO">Baixo</option>
+          </Select>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {filteredRisks.length === 0 ? (
+          <EmptyState
+            icon={ShieldCheck}
+            title="Nenhum alerta encontrado com os filtros selecionados."
+            description="Ajuste a busca ou o nível de risco para visualizar outros registros."
+          />
+        ) : (
+          <>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {pagination.pageItems.map((item, index) => (
+                <RiskCard
+                  key={item.key}
+                  index={index}
+                  alunoNome={item.alunoNome}
+                  alunoMatricula={item.alunoMatricula}
+                  disciplinaNome={item.disciplinaNome}
+                  professorNome={item.professorNome}
+                  semestre={item.semestre}
+                  risk={item.risk}
+                  matriculaId={item.matriculaId}
+                  notification={notification}
+                  explicitSemester={item.explicitSemester}
+                />
+              ))}
+            </div>
+            <Pagination
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalItems={pagination.totalItems}
+              onPageChange={pagination.setPage}
+              onPageSizeChange={pagination.setPageSize}
+              pageSizeOptions={[6, 12, 24, 48]}
+              itemLabel="alertas"
+            />
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
