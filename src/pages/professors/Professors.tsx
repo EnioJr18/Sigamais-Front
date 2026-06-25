@@ -40,7 +40,6 @@ import {
 } from '@/components/ui/table';
 import { canManageStructure } from '@/lib/rbac';
 import { usePagination } from '@/hooks/usePagination';
-import { getApiErrorMessage } from '@/services/http';
 import {
   atualizarProfessor,
   criarProfessor,
@@ -125,7 +124,66 @@ function getProfessorSaveError(error: unknown, editing: boolean) {
     case 409:
       return 'Já existe um cadastro com este email ou CPF.';
     default:
-      return getApiErrorMessage(error, 'Não foi possível salvar o professor.');
+      return (
+        extractProfessorErrorDetail(error) ||
+        'Não foi possível salvar o professor.'
+      );
+  }
+}
+
+function extractProfessorErrorDetail(error: unknown) {
+  if (!axios.isAxiosError(error)) return '';
+
+  const data = error.response?.data as
+    | {
+        message?: string;
+        mensagem?: string;
+        erro?: string;
+        error?: string;
+        detail?: string;
+      }
+    | string
+    | undefined;
+
+  if (typeof data === 'string') return data.trim();
+
+  return (
+    data?.message ??
+    data?.mensagem ??
+    data?.erro ??
+    data?.error ??
+    data?.detail ??
+    ''
+  ).trim();
+}
+
+function getProfessorOperationError(error: unknown, fallback400: string) {
+  if (!axios.isAxiosError(error)) {
+    return 'Não foi possível concluir a operação.';
+  }
+
+  if (!error.response) {
+    return 'Não foi possível conectar à API.';
+  }
+
+  const detail = extractProfessorErrorDetail(error);
+
+  switch (error.response.status) {
+    case 400:
+      return detail || fallback400;
+    case 401:
+      return 'Sessão expirada. Faça login novamente.';
+    case 403:
+      return 'Você não tem permissão para realizar esta ação.';
+    case 404:
+      return 'Professor não encontrado. Verifique se o registro ainda existe.';
+    case 409:
+      return (
+        detail ||
+        'Não foi possível excluir este professor porque existem dados vinculados.'
+      );
+    default:
+      return detail || 'Não foi possível concluir a operação.';
   }
 }
 
@@ -182,7 +240,12 @@ function Professors() {
     onError: error =>
       setFeedback({
         type: 'error',
-        message: getProfessorSaveError(error, Boolean(editing)),
+        message: editing
+          ? getProfessorOperationError(
+              error,
+              'Não foi possível concluir a operação.',
+            )
+          : getProfessorSaveError(error, false),
       }),
   });
 
@@ -199,9 +262,9 @@ function Professors() {
     onError: error =>
       setFeedback({
         type: 'error',
-        message: getApiErrorMessage(
+        message: getProfessorOperationError(
           error,
-          'Não foi possível excluir o professor.',
+          'Não foi possível concluir a operação.',
         ),
       }),
   });
@@ -214,6 +277,7 @@ function Professors() {
       [
         getProfessorName(professor),
         professor.email,
+        professor.cpf,
         getProfessorSpecialty(professor),
       ]
         .filter(Boolean)
@@ -276,7 +340,7 @@ function Professors() {
             <Input
               value={search}
               onChange={event => setSearch(event.target.value)}
-              placeholder="Buscar por nome, email ou especialidade"
+              placeholder="Buscar por nome, email, CPF ou titulação"
               className="pl-9"
               aria-label="Buscar professores"
             />
@@ -381,6 +445,9 @@ function Professors() {
         open={Boolean(deleting)}
         entityLabel="professor"
         itemLabel={deleting ? getProfessorName(deleting) : ''}
+        confirmationMessage="Tem certeza que deseja excluir este professor? Esta ação não poderá ser desfeita."
+        confirmLabel="Excluir"
+        pendingLabel="Excluindo..."
         pending={deleteMutation.isPending}
         error={feedback?.type === 'error' ? feedback.message : undefined}
         onClose={() => setDeleting(null)}
@@ -440,6 +507,7 @@ function ProfessorList({
             <TableRow>
               <TableHead>ID</TableHead>
               <TableHead>Nome</TableHead>
+              <TableHead>CPF</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Titulação</TableHead>
               {canManage && <TableHead className="text-right">Ações</TableHead>}
@@ -452,6 +520,7 @@ function ProfessorList({
                   #{professor.id}
                 </TableCell>
                 <TableCell>{professor.nome}</TableCell>
+                <TableCell>{professor.cpf || '—'}</TableCell>
                 <TableCell>{professor.email || '—'}</TableCell>
                 <TableCell>{getProfessorSpecialty(professor) || '—'}</TableCell>
                 {canManage && (
@@ -480,6 +549,9 @@ function ProfessorList({
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">
               {professor.email || 'Email não informado'}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              CPF: {professor.cpf || 'Não informado'}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
               {getProfessorSpecialty(professor) || 'Especialidade não informada'}
