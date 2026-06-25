@@ -155,7 +155,7 @@ function Attendance() {
       {feedback && !formOpen && !deleting && <FeedbackBanner feedback={feedback} />}
       <Card><CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0"><div><CardTitle>Resumo de frequência</CardTitle><CardDescription className="mt-2">{resumoQuery.isSuccess ? 'Dados acadêmicos consolidados.' : 'Resumo calculado a partir dos registros disponíveis.'}</CardDescription></div><div className="relative w-full sm:max-w-sm"><Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" /><Input value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar aluno, turma ou matrícula" className="pl-9" /></div></CardHeader><CardContent>{resumoQuery.isLoading && frequenciasQuery.isLoading ? <LoadingState label="Carregando resumo de frequências..." /> : resumoQuery.isError && frequenciasQuery.isError ? <ErrorMessage message="Não foi possível consultar o resumo nem os lançamentos de frequência." onRetry={() => { resumoQuery.refetch(); frequenciasQuery.refetch(); }} /> : summaries.length === 0 ? <EmptyState icon={ScrollText} title={search ? 'Nenhum resumo encontrado' : 'Nenhuma frequência registrada'} description={search ? 'Tente buscar por outro termo.' : 'Registre as primeiras faltas.'} action={canManage && !search && matriculas.length > 0 ? <Button size="sm" onClick={openCreate}>Lançar frequência</Button> : undefined} /> : <AttendanceSummaryList summaries={summaries} />}</CardContent></Card>
 
-      <Card><CardHeader><CardTitle>Lançamentos individuais</CardTitle><CardDescription>Histórico detalhado dos registros de frequência.</CardDescription></CardHeader><CardContent>{frequenciasQuery.isLoading ? <LoadingState label="Carregando lançamentos..." /> : frequenciasQuery.isError ? <ErrorMessage message="Não foi possível consultar os lançamentos individuais." onRetry={() => frequenciasQuery.refetch()} /> : filtered.length === 0 ? <EmptyState icon={ScrollText} title="Nenhum lançamento encontrado" description="Não há registros individuais para os filtros atuais." /> : <AttendanceList frequencias={filtered} matriculas={matriculas} alunos={alunos} turmas={turmas} canManage={false} onEdit={openEdit} onDelete={item => { setFeedback(null); setDeleting(item); }} />}</CardContent></Card>
+      <Card><CardHeader><CardTitle>Lançamentos individuais</CardTitle><CardDescription>Histórico detalhado dos registros de frequência.</CardDescription></CardHeader><CardContent>{frequenciasQuery.isLoading ? <LoadingState label="Carregando lançamentos..." /> : frequenciasQuery.isError ? <ErrorMessage message="Não foi possível consultar os lançamentos individuais." onRetry={() => frequenciasQuery.refetch()} /> : filtered.length === 0 ? <EmptyState icon={ScrollText} title="Nenhum lançamento encontrado" description="Não há registros individuais para os filtros atuais." /> : <AttendanceListWithPagination frequencias={filtered} matriculas={matriculas} alunos={alunos} turmas={turmas} canManage={false} onEdit={openEdit} onDelete={item => { setFeedback(null); setDeleting(item); }} />}</CardContent></Card>
 
       <Modal open={formOpen} title={editing ? 'Editar frequência' : 'Lançar frequência'} description="As faltas serão vinculadas à matrícula selecionada." onClose={closeForm}><form onSubmit={handleSubmit(data => saveMutation.mutate({ matriculaId: Number(data.matriculaId), faltas: Number(data.faltas) }))} className="space-y-4">{feedback?.type === 'error' && <InlineError message={feedback.message} />}<FormField label="Matrícula" error={errors.matriculaId?.message}><Select {...register('matriculaId')}><option value="">Selecione</option>{matriculas.map(item => <option key={item.id} value={item.id}>{buildEnrollmentLabel(item, alunos, turmas)}</option>)}</Select></FormField><FormField label="Faltas" error={errors.faltas?.message}><Input type="number" min="0" {...register('faltas')} /></FormField><div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end"><Button variant="ghost" onClick={closeForm}>Cancelar</Button><Button type="submit" disabled={saveMutation.isPending}>{saveMutation.isPending ? 'Salvando...' : editing ? 'Salvar alterações' : 'Lançar frequência'}</Button></div></form></Modal>
       <DeleteConfirmation open={Boolean(deleting)} entityLabel="frequência" itemLabel={deleting ? `#${deleting.id}` : ''} pending={deleteMutation.isPending} error={feedback?.type === 'error' ? feedback.message : undefined} onClose={() => setDeleting(null)} onConfirm={() => deleting && deleteMutation.mutate(deleting.id)} />
@@ -245,6 +245,35 @@ function AttendanceSummaryList({ summaries }: { summaries: AttendanceSummary[] }
 
 function AttendanceSummaryContent({ summaries }: { summaries: AttendanceSummary[] }) {
   return <><div className="hidden xl:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Matrícula acadêmica</TableHead><TableHead>Disciplina</TableHead><TableHead>Professor</TableHead><TableHead>Semestre</TableHead><TableHead>Total de faltas</TableHead><TableHead>Registros</TableHead></TableRow></TableHeader><TableBody>{summaries.map(summary => <TableRow key={summary.key}><TableCell className="font-semibold text-foreground">{summary.alunoLabel}</TableCell><TableCell>{summary.alunoMatricula}</TableCell><TableCell>{summary.disciplinaNome}</TableCell><TableCell>{summary.professorNome}</TableCell><TableCell>{summary.turmaLabel}</TableCell><TableCell><span className="text-lg font-bold text-destructive">{summary.totalFaltas}</span></TableCell><TableCell>{summary.quantidade} {summary.quantidade === 1 ? 'lançamento' : 'lançamentos'}</TableCell></TableRow>)}</TableBody></Table></div><div className="grid gap-3 xl:hidden">{summaries.map(summary => <article key={summary.key} className="rounded-xl border border-border bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-4"><div><h3 className="font-semibold text-foreground">{summary.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {summary.alunoMatricula}</p></div><div className="text-right"><p className="text-2xl font-bold text-destructive">{summary.totalFaltas}</p><p className="text-xs text-muted-foreground">faltas</p></div></div><p className="mt-3 text-sm text-foreground">{summary.disciplinaNome}</p><p className="mt-1 text-xs text-muted-foreground">Prof. {summary.professorNome} • {summary.turmaLabel}</p><p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">{summary.quantidade} {summary.quantidade === 1 ? 'lançamento registrado' : 'lançamentos registrados'}</p></article>)}</div></>;
+}
+
+function AttendanceListWithPagination({ frequencias, matriculas, alunos, turmas, canManage, onEdit, onDelete }: { frequencias: Frequencia[]; matriculas: Matricula[]; alunos: Awaited<ReturnType<typeof listarAlunos>>; turmas: Awaited<ReturnType<typeof listarTurmas>>; canManage: boolean; onEdit: (item: Frequencia) => void; onDelete: (item: Frequencia) => void }) {
+  const pagination = usePagination(frequencias, {
+    initialPageSize: 10,
+    resetKey: frequencias,
+  });
+
+  return (
+    <>
+      <AttendanceList
+        frequencias={pagination.pageItems}
+        matriculas={matriculas}
+        alunos={alunos}
+        turmas={turmas}
+        canManage={canManage}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+      <Pagination
+        page={pagination.page}
+        pageSize={pagination.pageSize}
+        totalItems={pagination.totalItems}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+        itemLabel="lançamentos"
+      />
+    </>
+  );
 }
 
 function AttendanceList({ frequencias, matriculas, alunos, turmas, canManage, onEdit, onDelete }: { frequencias: Frequencia[]; matriculas: Matricula[]; alunos: Awaited<ReturnType<typeof listarAlunos>>; turmas: Awaited<ReturnType<typeof listarTurmas>>; canManage: boolean; onEdit: (item: Frequencia) => void; onDelete: (item: Frequencia) => void }) {

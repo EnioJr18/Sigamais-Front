@@ -188,7 +188,7 @@ function Grades() {
 
       <Card>
         <CardHeader><CardTitle>Lançamentos individuais</CardTitle><CardDescription>Histórico detalhado das avaliações registradas.</CardDescription></CardHeader>
-        <CardContent>{notasQuery.isLoading ? <LoadingState label="Carregando lançamentos..." /> : notasQuery.isError ? <ErrorMessage message="Não foi possível consultar os lançamentos individuais." onRetry={() => notasQuery.refetch()} /> : filtered.length === 0 ? <EmptyState icon={Calculator} title="Nenhum lançamento encontrado" description="Não há notas individuais para os filtros atuais." /> : <GradeList notas={filtered} matriculas={matriculas} alunos={alunos} turmas={turmas} canManage={false} onEdit={openEdit} onDelete={item => { setFeedback(null); setDeleting(item); }} />}</CardContent>
+        <CardContent>{notasQuery.isLoading ? <LoadingState label="Carregando lançamentos..." /> : notasQuery.isError ? <ErrorMessage message="Não foi possível consultar os lançamentos individuais." onRetry={() => notasQuery.refetch()} /> : filtered.length === 0 ? <EmptyState icon={Calculator} title="Nenhum lançamento encontrado" description="Não há notas individuais para os filtros atuais." /> : <GradeListWithPagination notas={filtered} matriculas={matriculas} alunos={alunos} turmas={turmas} canManage={false} onEdit={openEdit} onDelete={item => { setFeedback(null); setDeleting(item); }} />}</CardContent>
       </Card>
 
       <Modal open={formOpen} title={editing ? 'Editar nota' : 'Lançar nota'} description="A nota será vinculada à matrícula selecionada." onClose={closeForm}>
@@ -298,6 +298,35 @@ function GradeSummaryList({ summaries }: { summaries: GradeSummary[] }) {
 
 function GradeSummaryContent({ summaries }: { summaries: GradeSummary[] }) {
   return <><div className="hidden xl:block"><Table><TableHeader><TableRow><TableHead>Aluno</TableHead><TableHead>Matrícula acadêmica</TableHead><TableHead>Disciplina</TableHead><TableHead>Professor</TableHead><TableHead>Semestre</TableHead><TableHead>Média</TableHead><TableHead>Notas</TableHead><TableHead>Situação</TableHead></TableRow></TableHeader><TableBody>{summaries.map(summary => { const situation = getGradeSituation(summary.media, summary.situacao); return <TableRow key={summary.key}><TableCell className="font-semibold text-foreground">{summary.alunoLabel}</TableCell><TableCell>{summary.alunoMatricula}</TableCell><TableCell>{summary.disciplinaNome}</TableCell><TableCell>{summary.professorNome}</TableCell><TableCell>{summary.turmaLabel}</TableCell><TableCell><span className="text-lg font-bold text-primary">{summary.media.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</span></TableCell><TableCell>{summary.quantidade}</TableCell><TableCell><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${situation.className}`}>{situation.label}</span></TableCell></TableRow>; })}</TableBody></Table></div><div className="grid gap-3 xl:hidden">{summaries.map(summary => { const situation = getGradeSituation(summary.media, summary.situacao); return <article key={summary.key} className="rounded-xl border border-border bg-card p-4 shadow-sm"><div className="flex items-start justify-between gap-4"><div><h3 className="font-semibold text-foreground">{summary.alunoLabel}</h3><p className="mt-1 text-xs text-muted-foreground">Matrícula {summary.alunoMatricula}</p></div><span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${situation.className}`}>{situation.label}</span></div><p className="mt-3 text-sm text-foreground">{summary.disciplinaNome}</p><p className="mt-1 text-xs text-muted-foreground">Prof. {summary.professorNome} • {summary.turmaLabel}</p><div className="mt-4 flex items-end justify-between border-t border-border pt-3"><div><p className="text-xs text-muted-foreground">Média</p><p className="text-2xl font-bold text-primary">{summary.media.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}</p></div><p className="text-xs text-muted-foreground">{summary.quantidade} {summary.quantidade === 1 ? 'nota' : 'notas'}</p></div></article>; })}</div></>;
+}
+
+function GradeListWithPagination({ notas, matriculas, alunos, turmas, canManage, onEdit, onDelete }: { notas: Nota[]; matriculas: Matricula[]; alunos: Awaited<ReturnType<typeof listarAlunos>>; turmas: Awaited<ReturnType<typeof listarTurmas>>; canManage: boolean; onEdit: (item: Nota) => void; onDelete: (item: Nota) => void }) {
+  const pagination = usePagination(notas, {
+    initialPageSize: 10,
+    resetKey: notas,
+  });
+
+  return (
+    <>
+      <GradeList
+        notas={pagination.pageItems}
+        matriculas={matriculas}
+        alunos={alunos}
+        turmas={turmas}
+        canManage={canManage}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+      <Pagination
+        page={pagination.page}
+        pageSize={pagination.pageSize}
+        totalItems={pagination.totalItems}
+        onPageChange={pagination.setPage}
+        onPageSizeChange={pagination.setPageSize}
+        itemLabel="lançamentos"
+      />
+    </>
+  );
 }
 
 function GradeList({ notas, matriculas, alunos, turmas, canManage, onEdit, onDelete }: { notas: Nota[]; matriculas: Matricula[]; alunos: Awaited<ReturnType<typeof listarAlunos>>; turmas: Awaited<ReturnType<typeof listarTurmas>>; canManage: boolean; onEdit: (item: Nota) => void; onDelete: (item: Nota) => void }) {
