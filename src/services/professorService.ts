@@ -51,7 +51,6 @@ export async function listarProfessores() {
 }
 
 export async function buscarProfessorPorId(id: number) {
-  // PENDÊNCIA BACKEND: não existe GET /professores/{id}.
   const response = await api.get<ProfessorApiResponse>(`/professores/${id}`);
   return normalizeProfessor(response.data);
 }
@@ -65,13 +64,11 @@ export async function atualizarProfessor(
   id: number,
   payload: ProfessorUpdatePayload,
 ) {
-  // PENDÊNCIA BACKEND: não existe PUT /professores/{id}.
   const response = await api.put<ProfessorApiResponse>(`/professores/${id}`, payload);
   return normalizeProfessor(response.data);
 }
 
 export async function excluirProfessor(id: number) {
-  // PENDÊNCIA BACKEND: não existe DELETE /professores/{id}.
   await api.delete(`/professores/${id}`);
 }
 
